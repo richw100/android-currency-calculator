@@ -7,6 +7,7 @@ import androidx.datastore.preferences.core.edit
 import androidx.datastore.preferences.core.longPreferencesKey
 import androidx.datastore.preferences.core.stringPreferencesKey
 import androidx.datastore.preferences.preferencesDataStore
+import com.example.calcapp.ui.CustomRateEntry
 import com.google.gson.Gson
 import com.google.gson.reflect.TypeToken
 import kotlinx.coroutines.flow.first
@@ -29,6 +30,7 @@ class ExchangeRateRepository(private val context: Context) {
     private val api = ExchangeRateApi.create()
     private val gson = Gson()
     private val rateMapType = object : TypeToken<Map<String, Double>>() {}.type
+    private val customRateMapType = object : TypeToken<Map<String, CustomRateEntry>>() {}.type
 
     suspend fun getRates(baseCurrency: String = "USD", forceRefresh: Boolean = false): Map<String, Double> {
         val prefs = context.dataStore.data.first()
@@ -83,5 +85,16 @@ class ExchangeRateRepository(private val context: Context) {
     suspend fun loadRecentCurrencies(): List<String> {
         val raw = context.dataStore.data.first()[RECENT_CURRENCIES_KEY] ?: return emptyList()
         return raw.split(",").filter { it.isNotBlank() }
+    }
+
+    private val customRatesKey = stringPreferencesKey("custom_rates")
+
+    suspend fun saveCustomRates(customRates: Map<String, CustomRateEntry>) {
+        context.dataStore.edit { it[customRatesKey] = gson.toJson(customRates) }
+    }
+
+    suspend fun loadCustomRates(): Map<String, CustomRateEntry> {
+        val json = context.dataStore.data.first()[customRatesKey] ?: return emptyMap()
+        return try { gson.fromJson(json, customRateMapType) } catch (e: Exception) { emptyMap() }
     }
 }

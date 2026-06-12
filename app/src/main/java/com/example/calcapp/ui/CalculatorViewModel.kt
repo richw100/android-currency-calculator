@@ -13,6 +13,8 @@ import java.util.Currency as JavaCurrency
 import kotlin.math.abs
 import kotlin.math.floor
 
+data class CustomRateEntry(val base: String, val rate: Double)
+
 data class CalculatorUiState(
     val display: String = "0",
     val expression: String = "",
@@ -25,6 +27,8 @@ data class CalculatorUiState(
     val isRefreshing: Boolean = false,
     val availableCurrencies: List<String> = emptyList(),
     val recentCurrencies: List<String> = emptyList(),
+    val customRates: Map<String, CustomRateEntry> = emptyMap(),
+    val liveRates: Map<String, Double> = emptyMap(),
     val isError: Boolean = false
 )
 
@@ -43,6 +47,8 @@ sealed class CalculatorAction {
     data class Operation(val symbol: Char) : CalculatorAction()
     data class SetToCurrency(val code: String) : CalculatorAction()
     data class SetFromCurrency(val code: String) : CalculatorAction()
+    data class SetCustomRate(val target: String, val base: String, val rate: Double) : CalculatorAction()
+    data class ClearCustomRate(val code: String) : CalculatorAction()
 }
 
 private data class BracketState(val firstOperand: Double?, val pendingOp: Char?)
@@ -71,7 +77,8 @@ class CalculatorViewModel(application: Application) : AndroidViewModel(applicati
         viewModelScope.launch {
             val (to, from) = repository.loadCurrencyPrefs()
             val recents = repository.loadRecentCurrencies()
-            _uiState.update { it.copy(toCurrency = to, fromCurrency = from, recentCurrencies = recents) }
+            val customRates = repository.loadCustomRates()
+            _uiState.update { it.copy(toCurrency = to, fromCurrency = from, recentCurrencies = recents, customRates = customRates) }
             fetchRates(forceRefresh = false)
         }
     }
@@ -95,7 +102,8 @@ class CalculatorViewModel(application: Application) : AndroidViewModel(applicati
                     it.copy(
                         isRefreshing = false,
                         lastUpdated = "Updated $updated",
-                        availableCurrencies = rates.keys.sorted()
+                        availableCurrencies = rates.keys.sorted(),
+                        liveRates = rates
                     )
                 }
             } catch (e: Exception) {
@@ -139,6 +147,19 @@ class CalculatorViewModel(application: Application) : AndroidViewModel(applicati
                 _uiState.update { it.copy(fromCurrency = action.code) }
                 updateRecents(action.code)
                 viewModelScope.launch { repository.saveCurrencyPrefs(_uiState.value.toCurrency, action.code) }
+                updateCurrencyDisplay(); return
+            }
+            is CalculatorAction.SetCustomRate -> {
+                val updated = _uiState.value.customRates.toMutableMap()
+                    .also { it[action.target] = CustomRateEntry(action.base, action.rate) }
+                _uiState.update { it.copy(customRates = updated) }
+                viewModelScope.launch { repository.saveCustomRates(updated) }
+                updateCurrencyDisplay(); return
+            }
+            is CalculatorAction.ClearCustomRate -> {
+                val updated = _uiState.value.customRates.toMutableMap().also { it.remove(action.code) }
+                _uiState.update { it.copy(customRates = updated) }
+                viewModelScope.launch { repository.saveCustomRates(updated) }
                 updateCurrencyDisplay(); return
             }
         }
@@ -341,17 +362,31 @@ class CalculatorViewModel(application: Application) : AndroidViewModel(applicati
         updateCurrencyDisplay()
     }
 
+    // Returns the effective "1 USD = X [code]" rate, preferring custom pair entries over live rates.
+    // Custom entry "1 base = rate target" → effectiveUsdRate(target) = liveUsdRate(base) * rate
+    private fun effectiveUsdRate(code: String, state: CalculatorUiState): Double? {
+        val entry = state.customRates[code]
+        return if (entry != null) {
+            val baseRate = rates[entry.base] ?: return null
+            baseRate * entry.rate
+        } else {
+            rates[code]
+        }
+    }
+
     private fun updateCurrencyDisplay() {
         val value = currentInput.toDoubleOrNull() ?: 0.0
         val state = _uiState.value
-        val fromRate = rates[state.fromCurrency]
-        val toRate = rates[state.toCurrency]
+        val fromRate = effectiveUsdRate(state.fromCurrency, state)
+        val toRate = effectiveUsdRate(state.toCurrency, state)
 
         if (fromRate != null && toRate != null && fromRate != 0.0) {
             val toValue = value * toRate / fromRate
             val fromName = try { JavaCurrency.getInstance(state.fromCurrency).displayName } catch (e: Exception) { state.fromCurrency }
             val toName = try { JavaCurrency.getInstance(state.toCurrency).displayName } catch (e: Exception) { state.toCurrency }
-            val rateLabel = "1 ${state.fromCurrency} ($fromName) = ${"%.4f".format(toRate / fromRate)} ${state.toCurrency} ($toName)"
+            val usingCustom = state.customRates.containsKey(state.fromCurrency) || state.customRates.containsKey(state.toCurrency)
+            val rateLabel = "1 ${state.fromCurrency} ($fromName) = ${"%.4f".format(toRate / fromRate)} ${state.toCurrency} ($toName)" +
+                if (usingCustom) " ★" else ""
             _uiState.update {
                 it.copy(
                     fromAmount = "${state.fromCurrency} ${"%.2f".format(value)}",
