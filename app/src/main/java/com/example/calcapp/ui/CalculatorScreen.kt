@@ -8,6 +8,8 @@ import androidx.compose.foundation.clickable
 import androidx.compose.foundation.combinedClickable
 import androidx.compose.foundation.isSystemInDarkTheme
 import androidx.compose.foundation.layout.*
+import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
@@ -36,6 +38,7 @@ import androidx.compose.ui.platform.LocalClipboardManager
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.text.AnnotatedString
+import androidx.compose.ui.window.Dialog
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
@@ -57,6 +60,11 @@ fun currencyFlag(code: String): String {
             String(Character.toChars(char.code - 'A'.code + 0x1F1E6))
         }.joinToString("")
     } catch (e: Exception) { "" }
+}
+
+private val currencyNameCache = HashMap<String, String>(200)
+fun currencyName(code: String) = currencyNameCache.getOrPut(code) {
+    try { JavaCurrency.getInstance(code).displayName } catch (e: Exception) { code }
 }
 
 // ── Root composable ──────────────────────────────────────────────────────────
@@ -497,75 +505,86 @@ fun CurrencySelector(
     var expanded by remember { mutableStateOf(false) }
     var search by remember { mutableStateOf("") }
 
-    fun matches(code: String): Boolean {
-        if (search.isEmpty()) return true
-        val name = try { JavaCurrency.getInstance(code).displayName } catch (e: Exception) { "" }
-        return code.contains(search, ignoreCase = true) || name.contains(search, ignoreCase = true)
+    val recentSet = remember(recentCurrencies) { recentCurrencies.toSet() }
+    val filteredRecents = remember(search, recentCurrencies) {
+        recentCurrencies.filter { code ->
+            search.isEmpty() || code.contains(search, true) || currencyName(code).contains(search, true)
+        }
+    }
+    val filteredOthers = remember(search, available, recentSet) {
+        available.filter { code ->
+            code !in recentSet &&
+                (search.isEmpty() || code.contains(search, true) || currencyName(code).contains(search, true))
+        }
     }
 
-    Box(modifier = modifier) {
-        OutlinedButton(
-            onClick = { expanded = true; search = "" },
-            modifier = Modifier.fillMaxWidth(),
-            shape = RoundedCornerShape(8.dp),
-            colors = ButtonDefaults.outlinedButtonColors(contentColor = colors.textPrimary),
-            border = androidx.compose.foundation.BorderStroke(1.dp, colors.inputBorder),
-            contentPadding = PaddingValues(horizontal = 8.dp, vertical = 4.dp)
-        ) {
-            Text(
-                "$label: ${currencyFlag(selected)} $selected${if (customRates.containsKey(selected)) " ★" else ""}",
-                fontSize = 13.sp, maxLines = 1
-            )
-        }
-        DropdownMenu(expanded = expanded, onDismissRequest = { expanded = false }, modifier = Modifier.heightIn(max = 360.dp)) {
-            OutlinedTextField(
-                value = search,
-                onValueChange = { search = it },
-                placeholder = { Text("Search...", fontSize = 13.sp) },
-                modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp).fillMaxWidth(),
-                singleLine = true
-            )
-            val filteredRecents = recentCurrencies.filter { matches(it) }
-            if (filteredRecents.isNotEmpty()) {
-                Text(text = "RECENT", fontSize = 10.sp, color = colors.textSecondary, modifier = Modifier.padding(horizontal = 16.dp, vertical = 4.dp))
-                filteredRecents.forEach { code ->
-                    val name = try { JavaCurrency.getInstance(code).displayName } catch (e: Exception) { code }
-                    DropdownMenuItem(
-                        text = {
-                            Row(verticalAlignment = Alignment.CenterVertically) {
-                                Text(currencyFlag(code), fontSize = 22.sp)
-                                Spacer(Modifier.width(10.dp))
-                                Column(modifier = Modifier.weight(1f)) {
-                                    Text(code, fontSize = 14.sp, fontWeight = FontWeight.Medium)
-                                    Text(name, fontSize = 11.sp, color = colors.textSecondary)
-                                }
-                                if (customRates.containsKey(code)) Text("★", color = colors.warningColor, fontSize = 12.sp)
-                            }
-                        },
-                        onClick = { onSelected(code); expanded = false }
+    OutlinedButton(
+        onClick = { expanded = true; search = "" },
+        modifier = modifier.fillMaxWidth(),
+        shape = RoundedCornerShape(8.dp),
+        colors = ButtonDefaults.outlinedButtonColors(contentColor = colors.textPrimary),
+        border = androidx.compose.foundation.BorderStroke(1.dp, colors.inputBorder),
+        contentPadding = PaddingValues(horizontal = 8.dp, vertical = 4.dp)
+    ) {
+        Text(
+            "$label: ${currencyFlag(selected)} $selected${if (customRates.containsKey(selected)) " ★" else ""}",
+            fontSize = 13.sp, maxLines = 1
+        )
+    }
+
+    if (expanded) {
+        Dialog(onDismissRequest = { expanded = false; search = "" }) {
+            Surface(shape = RoundedCornerShape(16.dp), color = colors.surface) {
+                Column(modifier = Modifier.padding(top = 12.dp)) {
+                    OutlinedTextField(
+                        value = search,
+                        onValueChange = { search = it },
+                        placeholder = { Text("Search...", fontSize = 13.sp) },
+                        modifier = Modifier.fillMaxWidth().padding(horizontal = 12.dp, vertical = 4.dp),
+                        singleLine = true
                     )
-                }
-                HorizontalDivider(modifier = Modifier.padding(vertical = 4.dp))
-            }
-            val recentSet = recentCurrencies.toSet()
-            available.filter { it !in recentSet && matches(it) }.forEach { code ->
-                val name = try { JavaCurrency.getInstance(code).displayName } catch (e: Exception) { code }
-                DropdownMenuItem(
-                    text = {
-                        Row(verticalAlignment = Alignment.CenterVertically) {
-                            Text(currencyFlag(code), fontSize = 22.sp)
-                            Spacer(Modifier.width(10.dp))
-                            Column(modifier = Modifier.weight(1f)) {
-                                Text(code, fontSize = 14.sp, fontWeight = FontWeight.Medium)
-                                Text(name, fontSize = 11.sp, color = colors.textSecondary)
+                    LazyColumn(modifier = Modifier.heightIn(max = 420.dp)) {
+                        if (filteredRecents.isNotEmpty()) {
+                            item {
+                                Text("RECENT", fontSize = 10.sp, color = colors.textSecondary,
+                                    modifier = Modifier.padding(horizontal = 16.dp, vertical = 4.dp))
                             }
-                            if (customRates.containsKey(code)) Text("★", color = colors.warningColor, fontSize = 12.sp)
+                            items(filteredRecents, key = { it }) { code ->
+                                CurrencyPickerRow(code = code, colors = colors, star = customRates.containsKey(code)) {
+                                    onSelected(code); expanded = false; search = ""
+                                }
+                            }
+                            item { HorizontalDivider(modifier = Modifier.padding(vertical = 4.dp), color = colors.divider) }
                         }
-                    },
-                    onClick = { onSelected(code); expanded = false }
-                )
+                        items(filteredOthers, key = { it }) { code ->
+                            CurrencyPickerRow(code = code, colors = colors, star = customRates.containsKey(code)) {
+                                onSelected(code); expanded = false; search = ""
+                            }
+                        }
+                    }
+                    Spacer(Modifier.height(8.dp))
+                }
             }
         }
+    }
+}
+
+@Composable
+private fun CurrencyPickerRow(code: String, colors: AppColors, star: Boolean, onClick: () -> Unit) {
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .clickable(onClick = onClick)
+            .padding(horizontal = 16.dp, vertical = 10.dp),
+        verticalAlignment = Alignment.CenterVertically
+    ) {
+        Text(currencyFlag(code), fontSize = 22.sp)
+        Spacer(Modifier.width(12.dp))
+        Column(modifier = Modifier.weight(1f)) {
+            Text(code, fontSize = 14.sp, fontWeight = FontWeight.Medium, color = colors.textPrimary)
+            Text(currencyName(code), fontSize = 11.sp, color = colors.textSecondary)
+        }
+        if (star) Text("★", color = colors.warningColor, fontSize = 12.sp)
     }
 }
 

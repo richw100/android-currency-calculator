@@ -5,6 +5,9 @@ import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
+import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.lazy.items
+import androidx.compose.ui.window.Dialog
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
@@ -26,7 +29,6 @@ import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
-import java.util.Currency as JavaCurrency
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -151,7 +153,7 @@ fun SettingsScreen(vm: CalculatorViewModel, modifier: Modifier = Modifier) {
             Text("No custom rates set.", fontSize = 14.sp, color = colors.textMuted, modifier = Modifier.padding(vertical = 8.dp))
         } else {
             state.customRates.entries.sortedBy { it.key }.forEach { (target, entry) ->
-                val targetName = try { JavaCurrency.getInstance(target).displayName } catch (e: Exception) { target }
+                val targetName = currencyName(target)
                 val livePairRate = run {
                     val b = state.liveRates[entry.base] ?: return@run null
                     val t = state.liveRates[target] ?: return@run null
@@ -305,43 +307,54 @@ private fun CurrencyDropdown(
     var expanded by remember { mutableStateOf(false) }
     var search by remember { mutableStateOf("") }
 
-    Box {
-        OutlinedButton(
-            onClick = { if (enabled) { expanded = true; search = "" } },
-            modifier = Modifier.fillMaxWidth(),
-            shape = RoundedCornerShape(8.dp),
-            colors = ButtonDefaults.outlinedButtonColors(contentColor = colors.textPrimary),
-            border = BorderStroke(1.dp, if (enabled) colors.inputBorder else colors.textMuted),
-            enabled = enabled
-        ) {
-            Text(if (code.isEmpty()) "Select currency…" else "${currencyFlag(code)} $code", fontSize = 14.sp)
+    val filtered = remember(search, availableCurrencies) {
+        availableCurrencies.filter { c ->
+            search.isEmpty() || c.contains(search, true) || currencyName(c).contains(search, true)
         }
-        DropdownMenu(expanded = expanded, onDismissRequest = { expanded = false }, modifier = Modifier.heightIn(max = 280.dp)) {
-            OutlinedTextField(
-                value = search,
-                onValueChange = { search = it },
-                placeholder = { Text("Search…", fontSize = 13.sp) },
-                modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp).fillMaxWidth(),
-                singleLine = true
-            )
-            availableCurrencies.filter { c ->
-                val name = try { JavaCurrency.getInstance(c).displayName } catch (e: Exception) { "" }
-                search.isEmpty() || c.contains(search, true) || name.contains(search, true)
-            }.forEach { c ->
-                val name = try { JavaCurrency.getInstance(c).displayName } catch (e: Exception) { c }
-                DropdownMenuItem(
-                    text = {
-                        Row(verticalAlignment = Alignment.CenterVertically) {
-                            Text(currencyFlag(c), fontSize = 18.sp)
-                            Spacer(Modifier.width(8.dp))
-                            Column {
-                                Text(c, fontSize = 13.sp, fontWeight = FontWeight.Medium)
-                                Text(name, fontSize = 11.sp, color = colors.textSecondary)
+    }
+
+    OutlinedButton(
+        onClick = { if (enabled) { expanded = true; search = "" } },
+        modifier = Modifier.fillMaxWidth(),
+        shape = RoundedCornerShape(8.dp),
+        colors = ButtonDefaults.outlinedButtonColors(contentColor = colors.textPrimary),
+        border = BorderStroke(1.dp, if (enabled) colors.inputBorder else colors.textMuted),
+        enabled = enabled
+    ) {
+        Text(if (code.isEmpty()) "Select currency…" else "${currencyFlag(code)} $code", fontSize = 14.sp)
+    }
+
+    if (expanded) {
+        Dialog(onDismissRequest = { expanded = false; search = "" }) {
+            Surface(shape = RoundedCornerShape(16.dp), color = colors.surface) {
+                Column(modifier = Modifier.padding(top = 12.dp)) {
+                    OutlinedTextField(
+                        value = search,
+                        onValueChange = { search = it },
+                        placeholder = { Text("Search…", fontSize = 13.sp) },
+                        modifier = Modifier.fillMaxWidth().padding(horizontal = 12.dp, vertical = 4.dp),
+                        singleLine = true
+                    )
+                    LazyColumn(modifier = Modifier.heightIn(max = 380.dp)) {
+                        items(filtered, key = { it }) { c ->
+                            Row(
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .clickable { onSelected(c); expanded = false; search = "" }
+                                    .padding(horizontal = 16.dp, vertical = 10.dp),
+                                verticalAlignment = Alignment.CenterVertically
+                            ) {
+                                Text(currencyFlag(c), fontSize = 18.sp)
+                                Spacer(Modifier.width(10.dp))
+                                Column {
+                                    Text(c, fontSize = 13.sp, fontWeight = FontWeight.Medium, color = colors.textPrimary)
+                                    Text(currencyName(c), fontSize = 11.sp, color = colors.textSecondary)
+                                }
                             }
                         }
-                    },
-                    onClick = { onSelected(c); expanded = false; search = "" }
-                )
+                    }
+                    Spacer(Modifier.height(8.dp))
+                }
             }
         }
     }
