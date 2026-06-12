@@ -190,6 +190,22 @@ fun AboutScreen(modifier: Modifier = Modifier) {
             Text("Buy me a coffee ☕", fontSize = 15.sp, modifier = Modifier.padding(vertical = 4.dp))
         }
 
+        Spacer(Modifier.height(12.dp))
+
+        OutlinedButton(
+            onClick = {
+                context.startActivity(
+                    Intent(Intent.ACTION_VIEW, Uri.parse("https://github.com/richw100/android-currency-calculator"))
+                )
+            },
+            modifier = Modifier.fillMaxWidth(),
+            shape = RoundedCornerShape(10.dp),
+            colors = ButtonDefaults.outlinedButtonColors(contentColor = Color(0xFF8E8E93)),
+            border = androidx.compose.foundation.BorderStroke(1.dp, Color(0xFF48484A))
+        ) {
+            Text("View on GitHub", fontSize = 15.sp, modifier = Modifier.padding(vertical = 4.dp))
+        }
+
         Spacer(Modifier.height(24.dp))
     }
 }
