@@ -187,6 +187,7 @@ fun AboutScreen(modifier: Modifier = Modifier) {
 @Composable
 fun CalculatorScreen(vm: CalculatorViewModel = viewModel(), modifier: Modifier = Modifier) {
     val state by vm.uiState.collectAsStateWithLifecycle()
+    val context = LocalContext.current
 
     Column(modifier = modifier.fillMaxSize()) {
         // Currency selectors
@@ -316,6 +317,28 @@ fun CalculatorScreen(vm: CalculatorViewModel = viewModel(), modifier: Modifier =
             onAction = vm::onAction,
             modifier = Modifier.padding(horizontal = 8.dp, vertical = 8.dp)
         )
+
+        OutlinedButton(
+            onClick = {
+                context.startActivity(
+                    Intent(Intent.ACTION_VIEW, Uri.parse("https://buymeacoffee.com/rww_100"))
+                )
+            },
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(horizontal = 8.dp, vertical = 4.dp),
+            shape = RoundedCornerShape(10.dp),
+            colors = ButtonDefaults.outlinedButtonColors(contentColor = Color(0xFFFF9F0A)),
+            border = androidx.compose.foundation.BorderStroke(1.dp, Color(0xFFFF9F0A))
+        ) {
+            Text(
+                text = "Like using this ad-free app? Buy me a coffee to say thanks! ☕",
+                fontSize = 11.sp,
+                textAlign = TextAlign.Center
+            )
+        }
+
+        Spacer(Modifier.height(4.dp))
     }
 }
 
