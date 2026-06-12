@@ -52,6 +52,7 @@ sealed class CalculatorAction {
     data class SetCustomRate(val target: String, val base: String, val rate: Double) : CalculatorAction()
     data class ClearCustomRate(val code: String) : CalculatorAction()
     data class SetHaptic(val enabled: Boolean) : CalculatorAction()
+    data class PasteValue(val text: String) : CalculatorAction()
 }
 
 private data class BracketState(val firstOperand: Double?, val pendingOp: Char?)
@@ -169,6 +170,18 @@ class CalculatorViewModel(application: Application) : AndroidViewModel(applicati
             is CalculatorAction.SetHaptic -> {
                 _uiState.update { it.copy(hapticEnabled = action.enabled) }
                 viewModelScope.launch { repository.saveHapticEnabled(action.enabled) }
+                return
+            }
+            is CalculatorAction.PasteValue -> {
+                val cleaned = action.text.replace(",", "").trim()
+                if (cleaned.toDoubleOrNull() != null) {
+                    currentInput = cleaned
+                    firstOperand = null; pendingOp = null
+                    bracketStack.clear(); expressionDisplay.clear()
+                    justCalculated = false; shouldResetInput = false
+                    _uiState.update { it.copy(isError = false) }
+                    updateDisplay()
+                }
                 return
             }
         }

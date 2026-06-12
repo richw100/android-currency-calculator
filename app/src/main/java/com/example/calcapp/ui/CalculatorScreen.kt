@@ -438,36 +438,50 @@ fun CalculatorScreen(vm: CalculatorViewModel = viewModel(), modifier: Modifier =
                 overflow = TextOverflow.Ellipsis
             )
             Box(modifier = Modifier.align(Alignment.TopEnd)) {
-            DropdownMenu(
-                expanded = displayMenuExpanded,
-                onDismissRequest = { displayMenuExpanded = false }
-            ) {
-                DropdownMenuItem(
-                    text = { Text("Copy") },
-                    onClick = {
-                        clipboard.setText(AnnotatedString(state.display))
-                        displayMenuExpanded = false
-                    }
-                )
-                DropdownMenuItem(
-                    text = { Text("Share") },
-                    onClick = {
-                        context.startActivity(
-                            Intent.createChooser(
-                                Intent(Intent.ACTION_SEND).apply {
-                                    type = "text/plain"
-                                    putExtra(
-                                        Intent.EXTRA_TEXT,
-                                        "${state.display} ${state.fromCurrency} = ${state.toAmount}"
-                                    )
-                                },
-                                null
+                val clipText = clipboard.getText()?.text
+                val pasteNumber = remember(clipText) {
+                    clipText?.let { Regex("-?\\d+(?:[.,]\\d+)*(?:\\.\\d+)?").find(it)?.value?.replace(",", "") }
+                        ?.takeIf { it.toDoubleOrNull() != null }
+                }
+                DropdownMenu(
+                    expanded = displayMenuExpanded,
+                    onDismissRequest = { displayMenuExpanded = false }
+                ) {
+                    DropdownMenuItem(
+                        text = { Text("Copy") },
+                        onClick = {
+                            clipboard.setText(AnnotatedString(state.display))
+                            displayMenuExpanded = false
+                        }
+                    )
+                    DropdownMenuItem(
+                        text = { Text("Share") },
+                        onClick = {
+                            context.startActivity(
+                                Intent.createChooser(
+                                    Intent(Intent.ACTION_SEND).apply {
+                                        type = "text/plain"
+                                        putExtra(
+                                            Intent.EXTRA_TEXT,
+                                            "${state.display} ${state.fromCurrency} = ${state.toAmount}"
+                                        )
+                                    },
+                                    null
+                                )
                             )
+                            displayMenuExpanded = false
+                        }
+                    )
+                    if (pasteNumber != null) {
+                        DropdownMenuItem(
+                            text = { Text("Paste $pasteNumber") },
+                            onClick = {
+                                vm.onAction(CalculatorAction.PasteValue(pasteNumber))
+                                displayMenuExpanded = false
+                            }
                         )
-                        displayMenuExpanded = false
                     }
-                )
-            }
+                }
             }
         }
 
