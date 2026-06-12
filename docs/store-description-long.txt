@@ -1,0 +1,47 @@
+Currency Calc — the calculator that converts as you type.
+
+Most currency apps make you switch between a calculator and a converter. Currency Calc combines both in one place. Enter any amount — or a full calculation — and see the live converted equivalent update in real time alongside your working.
+
+
+LIVE EXCHANGE RATES
+
+Rates are fetched automatically from open.er-api.com, covering 161 currencies worldwide. Rates refresh every 24 hours and are cached so the app keeps working even when you're offline.
+
+
+FULL CALCULATOR
+
+All the standard operations you'd expect — add, subtract, multiply, divide — plus brackets for complex expressions and a percentage key. A scrollable history of recent calculations lets you tap any result to restore it instantly.
+
+
+CUSTOM RATES
+
+Travelling soon, or already have a locked-in rate from your bank or travel money provider? Set your own exchange rate for any currency pair. The app shows exactly how your custom rate compares to the live rate, so you always know what you're getting.
+
+
+161 CURRENCIES
+
+From major pairs like GBP/EUR and USD/JPY to lesser-known currencies. Search by name or code, and your recently used currencies appear at the top for quick access.
+
+
+CUSTOMISABLE APPEARANCE
+
+Choose from five accent colour schemes for the calculator buttons. Switch between dark mode, light mode, or follow your device's system setting. All preferences are saved and restored between sessions.
+
+
+NO ADS, EVER
+
+Clean, distraction-free interface. No banner ads, no pop-ups, no subscriptions. Just a calculator.
+
+
+FEATURES AT A GLANCE
+
+• Live rates for 161 currencies, refreshed every 24 hours
+• Full calculator with brackets and percentage
+• Calculation history — tap any entry to restore it
+• Custom exchange rates with live rate comparison
+• Light and dark mode with system setting support
+• Five accent colour themes
+• Haptic feedback (optional)
+• Copy or share any calculated amount
+• Paste numbers directly into the display
+• Works offline using cached rates

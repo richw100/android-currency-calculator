@@ -1,0 +1,1 @@
+Calculator with live currency conversion. 161 currencies, no ads.
