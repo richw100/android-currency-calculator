@@ -1,0 +1,39 @@
+workflows:
+  ios-build:
+    name: iOS Debug Build
+    max_build_duration: 30
+    environment:
+      xcode: 15.4
+      node: none
+    scripts:
+      - name: Install XcodeGen
+        script: brew install xcodegen
+
+      - name: Generate Xcode project
+        script: |
+          cd ios
+          xcodegen generate
+
+      - name: Build for simulator (no signing)
+        script: |
+          cd ios
+          xcodebuild \
+            -project CalcApp.xcodeproj \
+            -scheme CalcApp \
+            -sdk iphonesimulator \
+            -destination 'platform=iOS Simulator,name=iPhone 15' \
+            -configuration Debug \
+            CODE_SIGNING_ALLOWED=NO \
+            clean build \
+            | xcpretty
+
+    artifacts:
+      - ios/build/**/*.app
+
+    publishing:
+      email:
+        recipients:
+          - richw999-play@yahoo.com
+        notify:
+          success: true
+          failure: true
