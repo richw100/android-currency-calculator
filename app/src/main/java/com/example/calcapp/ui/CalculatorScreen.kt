@@ -31,6 +31,7 @@ import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import kotlin.math.abs
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.viewmodel.compose.viewModel
 import com.example.calcapp.R
@@ -329,6 +330,18 @@ fun CalculatorScreen(vm: CalculatorViewModel = viewModel(), modifier: Modifier =
                         text = state.exchangeRateLabel,
                         color = Color(0xFF8E8E93),
                         fontSize = 12.sp
+                    )
+                }
+                state.customRatePctDiff?.let { pct ->
+                    val isAbove = pct >= 0
+                    val liveRate = state.liveRates[state.fromCurrency]
+                        ?.let { b -> state.liveRates[state.toCurrency]?.let { t -> if (b != 0.0) t / b else null } }
+                    val pctText = "${"%.2f".format(abs(pct))}% ${if (isAbove) "above" else "below"} live"
+                    val liveText = liveRate?.let { " (live: ${"%.4f".format(it)})" } ?: ""
+                    Text(
+                        text = "$pctText$liveText",
+                        color = if (isAbove) Color(0xFF34C759) else Color(0xFFFF3B30),
+                        fontSize = 11.sp
                     )
                 }
                 Text(

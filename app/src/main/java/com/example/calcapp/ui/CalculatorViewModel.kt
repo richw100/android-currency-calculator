@@ -29,6 +29,7 @@ data class CalculatorUiState(
     val recentCurrencies: List<String> = emptyList(),
     val customRates: Map<String, CustomRateEntry> = emptyMap(),
     val liveRates: Map<String, Double> = emptyMap(),
+    val customRatePctDiff: Double? = null,
     val isError: Boolean = false
 )
 
@@ -387,11 +388,21 @@ class CalculatorViewModel(application: Application) : AndroidViewModel(applicati
             val usingCustom = state.customRates.containsKey(state.fromCurrency) || state.customRates.containsKey(state.toCurrency)
             val rateLabel = "1 ${state.fromCurrency} ($fromName) = ${"%.4f".format(toRate / fromRate)} ${state.toCurrency} ($toName)" +
                 if (usingCustom) " ★" else ""
+            val pctDiff = if (usingCustom) {
+                val liveFrom = rates[state.fromCurrency]
+                val liveTo = rates[state.toCurrency]
+                if (liveFrom != null && liveTo != null && liveFrom != 0.0) {
+                    val liveRate = liveTo / liveFrom
+                    val customRate = toRate / fromRate
+                    (customRate - liveRate) / liveRate * 100.0
+                } else null
+            } else null
             _uiState.update {
                 it.copy(
                     fromAmount = "${state.fromCurrency} ${"%.2f".format(value)}",
                     toAmount = "${state.toCurrency} ${"%.2f".format(toValue)}",
-                    exchangeRateLabel = rateLabel
+                    exchangeRateLabel = rateLabel,
+                    customRatePctDiff = pctDiff
                 )
             }
         } else {
@@ -399,7 +410,8 @@ class CalculatorViewModel(application: Application) : AndroidViewModel(applicati
                 it.copy(
                     fromAmount = "${state.fromCurrency} —",
                     toAmount = "${state.toCurrency} —",
-                    exchangeRateLabel = ""
+                    exchangeRateLabel = "",
+                    customRatePctDiff = null
                 )
             }
         }
