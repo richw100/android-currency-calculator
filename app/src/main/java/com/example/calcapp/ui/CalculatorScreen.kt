@@ -26,10 +26,12 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.rotate
 import androidx.compose.ui.graphics.Color
 import java.util.Currency as JavaCurrency
-import androidx.compose.ui.hapticfeedback.HapticFeedbackType
+import android.os.Build
+import android.os.VibrationEffect
+import android.os.Vibrator
+import android.os.VibratorManager
 import androidx.compose.ui.platform.LocalClipboardManager
 import androidx.compose.ui.platform.LocalContext
-import androidx.compose.ui.platform.LocalHapticFeedback
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.text.AnnotatedString
 import androidx.compose.ui.text.font.FontWeight
@@ -243,12 +245,15 @@ fun AboutScreen(modifier: Modifier = Modifier) {
 
 // ── Calculator screen ─────────────────────────────────────────────────────────
 
+@OptIn(ExperimentalFoundationApi::class)
 @Composable
 fun CalculatorScreen(vm: CalculatorViewModel = viewModel(), modifier: Modifier = Modifier) {
     val state by vm.uiState.collectAsStateWithLifecycle()
     val context = LocalContext.current
+    val clipboard = LocalClipboardManager.current
     var showRefreshDialog by remember { mutableStateOf(false) }
     var warningCurrency by remember { mutableStateOf("") }
+    var displayMenuExpanded by remember { mutableStateOf(false) }
 
     val warningEntry = state.customRates[warningCurrency]
     if (warningCurrency.isNotEmpty() && warningEntry != null) {
@@ -418,22 +423,58 @@ fun CalculatorScreen(vm: CalculatorViewModel = viewModel(), modifier: Modifier =
         }
 
         // Main display
-        Text(
-            text = if (state.isError) "Error" else state.display,
-            color = Color.White,
-            fontSize = 72.sp,
-            fontWeight = FontWeight.Light,
-            modifier = Modifier
-                .fillMaxWidth()
-                .padding(horizontal = 20.dp, vertical = 4.dp),
-            textAlign = TextAlign.End,
-            maxLines = 1,
-            overflow = TextOverflow.Ellipsis
-        )
+        Box {
+            Text(
+                text = if (state.isError) "Error" else state.display,
+                color = Color.White,
+                fontSize = 72.sp,
+                fontWeight = FontWeight.Light,
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(horizontal = 20.dp, vertical = 4.dp)
+                    .combinedClickable(onClick = {}, onLongClick = { displayMenuExpanded = true }),
+                textAlign = TextAlign.End,
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis
+            )
+            Box(modifier = Modifier.align(Alignment.TopEnd)) {
+            DropdownMenu(
+                expanded = displayMenuExpanded,
+                onDismissRequest = { displayMenuExpanded = false }
+            ) {
+                DropdownMenuItem(
+                    text = { Text("Copy") },
+                    onClick = {
+                        clipboard.setText(AnnotatedString(state.display))
+                        displayMenuExpanded = false
+                    }
+                )
+                DropdownMenuItem(
+                    text = { Text("Share") },
+                    onClick = {
+                        context.startActivity(
+                            Intent.createChooser(
+                                Intent(Intent.ACTION_SEND).apply {
+                                    type = "text/plain"
+                                    putExtra(
+                                        Intent.EXTRA_TEXT,
+                                        "${state.display} ${state.fromCurrency} = ${state.toAmount}"
+                                    )
+                                },
+                                null
+                            )
+                        )
+                        displayMenuExpanded = false
+                    }
+                )
+            }
+            }
+        }
 
         // Button grid
         ButtonGrid(
             onAction = vm::onAction,
+            hapticEnabled = state.hapticEnabled,
             modifier = Modifier.padding(horizontal = 8.dp, vertical = 8.dp)
         )
 
@@ -746,7 +787,7 @@ private data class BtnDef(
 )
 
 @Composable
-fun ButtonGrid(onAction: (CalculatorAction) -> Unit, modifier: Modifier = Modifier) {
+fun ButtonGrid(onAction: (CalculatorAction) -> Unit, hapticEnabled: Boolean = true, modifier: Modifier = Modifier) {
     val rows = listOf(
         listOf(
             BtnDef("AC", ButtonLight, Color.Black, CalculatorAction.Clear),
@@ -785,6 +826,7 @@ fun ButtonGrid(onAction: (CalculatorAction) -> Unit, modifier: Modifier = Modifi
                         label = btn.label,
                         bg = btn.bg,
                         fg = btn.fg,
+                        hapticEnabled = hapticEnabled,
                         onClick = { onAction(btn.action) },
                         modifier = Modifier.weight(1f)
                     )
@@ -797,10 +839,10 @@ fun ButtonGrid(onAction: (CalculatorAction) -> Unit, modifier: Modifier = Modifi
             modifier = Modifier.fillMaxWidth(),
             horizontalArrangement = Arrangement.spacedBy(8.dp)
         ) {
-            CalcButton("0", ButtonDark, onClick = { onAction(CalculatorAction.Digit(0)) }, modifier = Modifier.weight(1f))
-            CalcButton(".", ButtonDark, onClick = { onAction(CalculatorAction.Decimal) }, modifier = Modifier.weight(1f))
-            CalcButton("⌫", ButtonDark, onClick = { onAction(CalculatorAction.Delete) }, modifier = Modifier.weight(1f))
-            CalcButton("=", ButtonOrange, onClick = { onAction(CalculatorAction.Calculate) }, modifier = Modifier.weight(1f))
+            CalcButton("0", ButtonDark, hapticEnabled = hapticEnabled, onClick = { onAction(CalculatorAction.Digit(0)) }, modifier = Modifier.weight(1f))
+            CalcButton(".", ButtonDark, hapticEnabled = hapticEnabled, onClick = { onAction(CalculatorAction.Decimal) }, modifier = Modifier.weight(1f))
+            CalcButton("⌫", ButtonDark, hapticEnabled = hapticEnabled, onClick = { onAction(CalculatorAction.Delete) }, modifier = Modifier.weight(1f))
+            CalcButton("=", ButtonOrange, hapticEnabled = hapticEnabled, onClick = { onAction(CalculatorAction.Calculate) }, modifier = Modifier.weight(1f))
         }
         Spacer(modifier = Modifier.height(8.dp))
     }
@@ -811,13 +853,26 @@ fun CalcButton(
     label: String,
     bg: Color,
     fg: Color = Color.White,
+    hapticEnabled: Boolean = true,
     onClick: () -> Unit,
     modifier: Modifier = Modifier
 ) {
-    val haptic = LocalHapticFeedback.current
+    val context = LocalContext.current
     Button(
         onClick = {
-            haptic.performHapticFeedback(HapticFeedbackType.LongPress)
+            if (hapticEnabled) {
+                val vibrator = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
+                    (context.getSystemService(VibratorManager::class.java)).defaultVibrator
+                } else {
+                    @Suppress("DEPRECATION")
+                    context.getSystemService(Vibrator::class.java)
+                }
+                if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
+                    vibrator?.vibrate(VibrationEffect.createPredefined(VibrationEffect.EFFECT_CLICK))
+                } else {
+                    vibrator?.vibrate(VibrationEffect.createOneShot(20, VibrationEffect.DEFAULT_AMPLITUDE))
+                }
+            }
             onClick()
         },
         modifier = modifier.height(72.dp),

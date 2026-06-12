@@ -3,6 +3,7 @@ package com.example.calcapp.data
 import android.content.Context
 import androidx.datastore.core.DataStore
 import androidx.datastore.preferences.core.Preferences
+import androidx.datastore.preferences.core.booleanPreferencesKey
 import androidx.datastore.preferences.core.edit
 import androidx.datastore.preferences.core.longPreferencesKey
 import androidx.datastore.preferences.core.stringPreferencesKey
@@ -97,4 +98,13 @@ class ExchangeRateRepository(private val context: Context) {
         val json = context.dataStore.data.first()[customRatesKey] ?: return emptyMap()
         return try { gson.fromJson(json, customRateMapType) } catch (e: Exception) { emptyMap() }
     }
+
+    private val hapticEnabledKey = booleanPreferencesKey("haptic_enabled")
+
+    suspend fun saveHapticEnabled(enabled: Boolean) {
+        context.dataStore.edit { it[hapticEnabledKey] = enabled }
+    }
+
+    suspend fun loadHapticEnabled(): Boolean =
+        context.dataStore.data.first()[hapticEnabledKey] ?: true
 }

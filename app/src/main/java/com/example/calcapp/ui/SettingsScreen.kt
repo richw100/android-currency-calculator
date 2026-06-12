@@ -53,6 +53,38 @@ fun SettingsScreen(vm: CalculatorViewModel, modifier: Modifier = Modifier) {
             .padding(horizontal = 20.dp, vertical = 16.dp)
     ) {
         Text(
+            text = "GENERAL",
+            fontSize = 12.sp,
+            color = Color(0xFF8E8E93),
+            fontWeight = FontWeight.Medium,
+            modifier = Modifier.padding(bottom = 8.dp)
+        )
+
+        Card(
+            modifier = Modifier.fillMaxWidth(),
+            colors = CardDefaults.cardColors(containerColor = Color(0xFF2C2C2E))
+        ) {
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(horizontal = 16.dp, vertical = 12.dp),
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Column(modifier = Modifier.weight(1f)) {
+                    Text("Haptic feedback", color = Color.White, fontSize = 15.sp)
+                    Text("Vibrate on button tap", color = Color(0xFF8E8E93), fontSize = 12.sp)
+                }
+                Switch(
+                    checked = state.hapticEnabled,
+                    onCheckedChange = { vm.onAction(CalculatorAction.SetHaptic(it)) },
+                    colors = SwitchDefaults.colors(checkedThumbColor = Color.White, checkedTrackColor = Color(0xFF34C759))
+                )
+            }
+        }
+
+        Spacer(Modifier.height(24.dp))
+
+        Text(
             text = "CUSTOM EXCHANGE RATES",
             fontSize = 12.sp,
             color = Color(0xFF8E8E93),

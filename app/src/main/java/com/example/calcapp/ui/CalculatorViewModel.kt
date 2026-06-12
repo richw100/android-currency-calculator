@@ -30,6 +30,7 @@ data class CalculatorUiState(
     val customRates: Map<String, CustomRateEntry> = emptyMap(),
     val liveRates: Map<String, Double> = emptyMap(),
     val customRatePctDiff: Double? = null,
+    val hapticEnabled: Boolean = true,
     val isError: Boolean = false
 )
 
@@ -50,6 +51,7 @@ sealed class CalculatorAction {
     data class SetFromCurrency(val code: String) : CalculatorAction()
     data class SetCustomRate(val target: String, val base: String, val rate: Double) : CalculatorAction()
     data class ClearCustomRate(val code: String) : CalculatorAction()
+    data class SetHaptic(val enabled: Boolean) : CalculatorAction()
 }
 
 private data class BracketState(val firstOperand: Double?, val pendingOp: Char?)
@@ -79,7 +81,8 @@ class CalculatorViewModel(application: Application) : AndroidViewModel(applicati
             val (to, from) = repository.loadCurrencyPrefs()
             val recents = repository.loadRecentCurrencies()
             val customRates = repository.loadCustomRates()
-            _uiState.update { it.copy(toCurrency = to, fromCurrency = from, recentCurrencies = recents, customRates = customRates) }
+            val hapticEnabled = repository.loadHapticEnabled()
+            _uiState.update { it.copy(toCurrency = to, fromCurrency = from, recentCurrencies = recents, customRates = customRates, hapticEnabled = hapticEnabled) }
             fetchRates(forceRefresh = false)
         }
     }
@@ -162,6 +165,11 @@ class CalculatorViewModel(application: Application) : AndroidViewModel(applicati
                 _uiState.update { it.copy(customRates = updated) }
                 viewModelScope.launch { repository.saveCustomRates(updated) }
                 updateCurrencyDisplay(); return
+            }
+            is CalculatorAction.SetHaptic -> {
+                _uiState.update { it.copy(hapticEnabled = action.enabled) }
+                viewModelScope.launch { repository.saveHapticEnabled(action.enabled) }
+                return
             }
         }
         updateDisplay()
