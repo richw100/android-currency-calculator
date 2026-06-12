@@ -5,36 +5,45 @@ import android.net.Uri
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
+import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.Close
+import androidx.compose.material.icons.filled.Menu
 import androidx.compose.material.icons.filled.Refresh
 import androidx.compose.material.icons.filled.SwapHoriz
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.rotate
 import androidx.compose.ui.graphics.Color
 import java.util.Currency as JavaCurrency
+import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
-import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.viewmodel.compose.viewModel
+import com.example.calcapp.R
 
 private val BgColor = Color(0xFF1C1C1E)
 private val ButtonDark = Color(0xFF333333)
 private val ButtonLight = Color(0xFFA5A5A5)
 private val ButtonOrange = Color(0xFFFF9F0A)
 
+// ── Root composable ──────────────────────────────────────────────────────────
+
 @Composable
-fun CalculatorScreen(vm: CalculatorViewModel = viewModel()) {
-    val state by vm.uiState.collectAsStateWithLifecycle()
-    val context = LocalContext.current
+fun AppScreen() {
+    var showAbout by remember { mutableStateOf(false) }
+    val vm: CalculatorViewModel = viewModel()
 
     Column(
         modifier = Modifier
@@ -42,6 +51,144 @@ fun CalculatorScreen(vm: CalculatorViewModel = viewModel()) {
             .background(BgColor)
             .systemBarsPadding()
     ) {
+        // Top bar
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(horizontal = 12.dp, vertical = 6.dp),
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            Box(
+                modifier = Modifier
+                    .size(34.dp)
+                    .clip(RoundedCornerShape(8.dp))
+                    .background(Color(0xFF00BCD4))
+            ) {
+                Icon(
+                    painter = painterResource(id = R.drawable.ic_launcher_foreground),
+                    contentDescription = null,
+                    tint = Color.Unspecified,
+                    modifier = Modifier.fillMaxSize()
+                )
+            }
+            Spacer(modifier = Modifier.width(10.dp))
+            Text(
+                text = "Currency Calculator",
+                color = Color.White,
+                fontSize = 18.sp,
+                fontWeight = FontWeight.SemiBold
+            )
+            Spacer(modifier = Modifier.weight(1f))
+            IconButton(onClick = { showAbout = !showAbout }) {
+                Icon(
+                    imageVector = if (showAbout) Icons.Default.Close else Icons.Default.Menu,
+                    contentDescription = if (showAbout) "Back to calculator" else "About",
+                    tint = Color.White
+                )
+            }
+        }
+
+        HorizontalDivider(color = Color(0xFF2C2C2E), thickness = 1.dp)
+
+        if (showAbout) {
+            AboutScreen(modifier = Modifier.weight(1f))
+        } else {
+            CalculatorScreen(vm = vm, modifier = Modifier.weight(1f))
+        }
+    }
+}
+
+// ── About screen ─────────────────────────────────────────────────────────────
+
+@Composable
+fun AboutScreen(modifier: Modifier = Modifier) {
+    val context = LocalContext.current
+
+    Column(
+        modifier = modifier
+            .fillMaxSize()
+            .verticalScroll(rememberScrollState())
+            .padding(horizontal = 28.dp, vertical = 16.dp),
+        horizontalAlignment = Alignment.CenterHorizontally
+    ) {
+        Spacer(Modifier.height(32.dp))
+
+        Box(
+            modifier = Modifier
+                .size(100.dp)
+                .clip(RoundedCornerShape(22.dp))
+                .background(Color(0xFF00BCD4))
+        ) {
+            Icon(
+                painter = painterResource(id = R.drawable.ic_launcher_foreground),
+                contentDescription = null,
+                tint = Color.Unspecified,
+                modifier = Modifier.fillMaxSize()
+            )
+        }
+
+        Spacer(Modifier.height(20.dp))
+
+        Text(
+            text = "Currency Calc",
+            color = Color.White,
+            fontSize = 26.sp,
+            fontWeight = FontWeight.Bold
+        )
+        Text(
+            text = "Version 1.0",
+            color = Color(0xFF8E8E93),
+            fontSize = 13.sp
+        )
+
+        Spacer(Modifier.height(32.dp))
+
+        Text(
+            text = "A simple, ad-free calculator with live dual-currency conversion. " +
+                    "Enter any amount and see the equivalent in your chosen currency pair as you type.",
+            color = Color(0xFFAEAEB2),
+            fontSize = 15.sp,
+            textAlign = TextAlign.Center,
+            lineHeight = 22.sp
+        )
+
+        Spacer(Modifier.height(20.dp))
+
+        Text(
+            text = "Exchange rates from open.er-api.com\nUpdated every 24 hours · 161 currencies",
+            color = Color(0xFF636366),
+            fontSize = 13.sp,
+            textAlign = TextAlign.Center,
+            lineHeight = 20.sp
+        )
+
+        Spacer(Modifier.height(48.dp))
+
+        OutlinedButton(
+            onClick = {
+                context.startActivity(
+                    Intent(Intent.ACTION_VIEW, Uri.parse("https://buymeacoffee.com/rww_100"))
+                )
+            },
+            modifier = Modifier.fillMaxWidth(),
+            shape = RoundedCornerShape(10.dp),
+            colors = ButtonDefaults.outlinedButtonColors(contentColor = Color(0xFFFF9F0A)),
+            border = androidx.compose.foundation.BorderStroke(1.dp, Color(0xFFFF9F0A))
+        ) {
+            Text("Buy me a coffee ☕", fontSize = 15.sp, modifier = Modifier.padding(vertical = 4.dp))
+        }
+
+        Spacer(Modifier.height(24.dp))
+    }
+}
+
+// ── Calculator screen ─────────────────────────────────────────────────────────
+
+@Composable
+fun CalculatorScreen(vm: CalculatorViewModel = viewModel(), modifier: Modifier = Modifier) {
+    val state by vm.uiState.collectAsStateWithLifecycle()
+
+    Column(modifier = modifier.fillMaxSize()) {
         // Currency selectors
         Row(
             modifier = Modifier
@@ -169,23 +316,10 @@ fun CalculatorScreen(vm: CalculatorViewModel = viewModel()) {
             onAction = vm::onAction,
             modifier = Modifier.padding(horizontal = 8.dp, vertical = 8.dp)
         )
-
-        Text(
-            text = "Like using this ad-free app? Buy me a coffee to say thanks!",
-            color = Color(0xFF636366),
-            fontSize = 11.sp,
-            textAlign = TextAlign.Center,
-            modifier = Modifier
-                .fillMaxWidth()
-                .clickable {
-                    context.startActivity(
-                        Intent(Intent.ACTION_VIEW, Uri.parse("https://buymeacoffee.com/rww_100"))
-                    )
-                }
-                .padding(horizontal = 16.dp, vertical = 8.dp)
-        )
     }
 }
+
+// ── Currency selector ─────────────────────────────────────────────────────────
 
 @Composable
 fun CurrencySelector(
@@ -246,6 +380,8 @@ fun CurrencySelector(
     }
 }
 
+// ── Button grid ───────────────────────────────────────────────────────────────
+
 private data class BtnDef(
     val label: String,
     val bg: Color,
@@ -305,30 +441,10 @@ fun ButtonGrid(onAction: (CalculatorAction) -> Unit, modifier: Modifier = Modifi
             modifier = Modifier.fillMaxWidth(),
             horizontalArrangement = Arrangement.spacedBy(8.dp)
         ) {
-            CalcButton(
-                label = "0",
-                bg = ButtonDark,
-                onClick = { onAction(CalculatorAction.Digit(0)) },
-                modifier = Modifier.weight(1f)
-            )
-            CalcButton(
-                label = ".",
-                bg = ButtonDark,
-                onClick = { onAction(CalculatorAction.Decimal) },
-                modifier = Modifier.weight(1f)
-            )
-            CalcButton(
-                label = "⌫",
-                bg = ButtonDark,
-                onClick = { onAction(CalculatorAction.Delete) },
-                modifier = Modifier.weight(1f)
-            )
-            CalcButton(
-                label = "=",
-                bg = ButtonOrange,
-                onClick = { onAction(CalculatorAction.Calculate) },
-                modifier = Modifier.weight(1f)
-            )
+            CalcButton("0", ButtonDark, onClick = { onAction(CalculatorAction.Digit(0)) }, modifier = Modifier.weight(1f))
+            CalcButton(".", ButtonDark, onClick = { onAction(CalculatorAction.Decimal) }, modifier = Modifier.weight(1f))
+            CalcButton("⌫", ButtonDark, onClick = { onAction(CalculatorAction.Delete) }, modifier = Modifier.weight(1f))
+            CalcButton("=", ButtonOrange, onClick = { onAction(CalculatorAction.Calculate) }, modifier = Modifier.weight(1f))
         }
         Spacer(modifier = Modifier.height(8.dp))
     }
@@ -349,10 +465,6 @@ fun CalcButton(
         colors = ButtonDefaults.buttonColors(containerColor = bg, contentColor = fg),
         contentPadding = PaddingValues(0.dp)
     ) {
-        Text(
-            text = label,
-            fontSize = 28.sp,
-            fontWeight = FontWeight.Medium
-        )
+        Text(text = label, fontSize = 28.sp, fontWeight = FontWeight.Medium)
     }
 }

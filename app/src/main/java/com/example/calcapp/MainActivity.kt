@@ -4,7 +4,7 @@ import android.os.Bundle
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
-import com.example.calcapp.ui.CalculatorScreen
+import com.example.calcapp.ui.AppScreen
 import com.example.calcapp.ui.theme.CalcAppTheme
 
 class MainActivity : ComponentActivity() {
@@ -13,7 +13,7 @@ class MainActivity : ComponentActivity() {
         enableEdgeToEdge()
         setContent {
             CalcAppTheme {
-                CalculatorScreen()
+                AppScreen()
             }
         }
     }
