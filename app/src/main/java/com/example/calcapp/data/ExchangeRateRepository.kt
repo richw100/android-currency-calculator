@@ -8,7 +8,9 @@ import androidx.datastore.preferences.core.edit
 import androidx.datastore.preferences.core.longPreferencesKey
 import androidx.datastore.preferences.core.stringPreferencesKey
 import androidx.datastore.preferences.preferencesDataStore
+import com.example.calcapp.ui.AccentScheme
 import com.example.calcapp.ui.CustomRateEntry
+import com.example.calcapp.ui.DarkModePref
 import com.example.calcapp.ui.HistoryEntry
 import com.google.gson.Gson
 import com.google.gson.reflect.TypeToken
@@ -119,5 +121,26 @@ class ExchangeRateRepository(private val context: Context) {
     suspend fun loadHistory(): List<HistoryEntry> {
         val json = context.dataStore.data.first()[historyKey] ?: return emptyList()
         return try { gson.fromJson(json, historyListType) } catch (e: Exception) { emptyList() }
+    }
+
+    private val darkModePrefKey = stringPreferencesKey("dark_mode_pref")
+    private val accentSchemeKey = stringPreferencesKey("accent_scheme")
+
+    suspend fun saveDarkModePref(pref: DarkModePref) {
+        context.dataStore.edit { it[darkModePrefKey] = pref.name }
+    }
+
+    suspend fun loadDarkModePref(): DarkModePref {
+        val name = context.dataStore.data.first()[darkModePrefKey] ?: return DarkModePref.SYSTEM
+        return try { DarkModePref.valueOf(name) } catch (e: Exception) { DarkModePref.SYSTEM }
+    }
+
+    suspend fun saveAccentScheme(scheme: AccentScheme) {
+        context.dataStore.edit { it[accentSchemeKey] = scheme.name }
+    }
+
+    suspend fun loadAccentScheme(): AccentScheme {
+        val name = context.dataStore.data.first()[accentSchemeKey] ?: return AccentScheme.TEAL_GREEN
+        return try { AccentScheme.valueOf(name) } catch (e: Exception) { AccentScheme.TEAL_GREEN }
     }
 }

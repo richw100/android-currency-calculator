@@ -43,7 +43,9 @@ data class CalculatorUiState(
     val hapticEnabled: Boolean = true,
     val isError: Boolean = false,
     val history: List<HistoryEntry> = emptyList(),
-    val isOffline: Boolean = false
+    val isOffline: Boolean = false,
+    val darkModePref: DarkModePref = DarkModePref.SYSTEM,
+    val accentScheme: AccentScheme = AccentScheme.TEAL_GREEN
 )
 
 sealed class CalculatorAction {
@@ -67,6 +69,8 @@ sealed class CalculatorAction {
     data class PasteValue(val text: String) : CalculatorAction()
     data class RestoreHistory(val entry: HistoryEntry) : CalculatorAction()
     object ClearHistory : CalculatorAction()
+    data class SetDarkMode(val pref: DarkModePref) : CalculatorAction()
+    data class SetAccentScheme(val scheme: AccentScheme) : CalculatorAction()
 }
 
 private data class BracketState(val firstOperand: Double?, val pendingOp: Char?)
@@ -98,7 +102,9 @@ class CalculatorViewModel(application: Application) : AndroidViewModel(applicati
             val customRates = repository.loadCustomRates()
             val hapticEnabled = repository.loadHapticEnabled()
             val history = repository.loadHistory()
-            _uiState.update { it.copy(toCurrency = to, fromCurrency = from, recentCurrencies = recents, customRates = customRates, hapticEnabled = hapticEnabled, history = history) }
+            val darkModePref = repository.loadDarkModePref()
+            val accentScheme = repository.loadAccentScheme()
+            _uiState.update { it.copy(toCurrency = to, fromCurrency = from, recentCurrencies = recents, customRates = customRates, hapticEnabled = hapticEnabled, history = history, darkModePref = darkModePref, accentScheme = accentScheme) }
             fetchRates(forceRefresh = false)
         }
     }
@@ -216,6 +222,16 @@ class CalculatorViewModel(application: Application) : AndroidViewModel(applicati
             is CalculatorAction.ClearHistory -> {
                 _uiState.update { it.copy(history = emptyList()) }
                 viewModelScope.launch { repository.saveHistory(emptyList()) }
+                return
+            }
+            is CalculatorAction.SetDarkMode -> {
+                _uiState.update { it.copy(darkModePref = action.pref) }
+                viewModelScope.launch { repository.saveDarkModePref(action.pref) }
+                return
+            }
+            is CalculatorAction.SetAccentScheme -> {
+                _uiState.update { it.copy(accentScheme = action.scheme) }
+                viewModelScope.launch { repository.saveAccentScheme(action.scheme) }
                 return
             }
         }

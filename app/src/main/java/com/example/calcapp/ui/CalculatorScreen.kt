@@ -6,6 +6,7 @@ import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.combinedClickable
+import androidx.compose.foundation.isSystemInDarkTheme
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
@@ -25,7 +26,6 @@ import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
-import androidx.compose.ui.draw.rotate
 import androidx.compose.ui.graphics.Color
 import java.util.Currency as JavaCurrency
 import android.os.Build
@@ -45,11 +45,7 @@ import kotlin.math.abs
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.viewmodel.compose.viewModel
 import com.example.calcapp.R
-
-private val BgColor = Color(0xFF1C1C1E)
-private val ButtonDark = Color(0xFF333333)
-private val ButtonLight = Color(0xFFA5A5A5)
-private val ButtonOrange = Color(0xFFFF9F0A)
+import com.example.calcapp.ui.theme.CalcAppTheme
 
 fun currencyFlag(code: String): String {
     val countryCode = when (code) {
@@ -72,81 +68,94 @@ fun AppScreen() {
     var screen by remember { mutableStateOf(Screen.Calculator) }
     var menuExpanded by remember { mutableStateOf(false) }
     val vm: CalculatorViewModel = viewModel()
+    val state by vm.uiState.collectAsStateWithLifecycle()
 
-    Column(
-        modifier = Modifier
-            .fillMaxSize()
-            .background(BgColor)
-            .systemBarsPadding()
-    ) {
-        // Top bar
-        Row(
-            modifier = Modifier
-                .fillMaxWidth()
-                .padding(horizontal = 12.dp, vertical = 6.dp),
-            verticalAlignment = Alignment.CenterVertically
-        ) {
-            Box(
+    val systemDark = isSystemInDarkTheme()
+    val effectiveIsDark = when (state.darkModePref) {
+        DarkModePref.SYSTEM -> systemDark
+        DarkModePref.LIGHT  -> false
+        DarkModePref.DARK   -> true
+    }
+    val colors = buildAppColors(effectiveIsDark, state.accentScheme)
+
+    CalcAppTheme(darkTheme = effectiveIsDark) {
+        CompositionLocalProvider(LocalAppColors provides colors) {
+            Column(
                 modifier = Modifier
-                    .size(34.dp)
-                    .clip(RoundedCornerShape(8.dp))
-                    .background(Color(0xFF00BCD4))
+                    .fillMaxSize()
+                    .background(colors.background)
+                    .systemBarsPadding()
             ) {
-                Icon(
-                    painter = painterResource(id = R.drawable.ic_launcher_foreground),
-                    contentDescription = null,
-                    tint = Color.Unspecified,
-                    modifier = Modifier.fillMaxSize()
-                )
-            }
-            Spacer(modifier = Modifier.width(10.dp))
-            Text(
-                text = "Currency Calculator",
-                color = Color.White,
-                fontSize = 18.sp,
-                fontWeight = FontWeight.SemiBold
-            )
-            Spacer(modifier = Modifier.weight(1f))
-            if (screen == Screen.Calculator) {
-                Box {
-                    IconButton(onClick = { menuExpanded = true }) {
-                        Icon(Icons.Default.Menu, contentDescription = "Menu", tint = Color.White)
-                    }
-                    DropdownMenu(
-                        expanded = menuExpanded,
-                        onDismissRequest = { menuExpanded = false }
+                // Top bar
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(horizontal = 12.dp, vertical = 6.dp),
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Box(
+                        modifier = Modifier
+                            .size(34.dp)
+                            .clip(RoundedCornerShape(8.dp))
+                            .background(Color(0xFF00BCD4))
                     ) {
-                        DropdownMenuItem(
-                            text = { Text("History") },
-                            leadingIcon = { Icon(Icons.Default.History, null) },
-                            onClick = { screen = Screen.History; menuExpanded = false }
-                        )
-                        DropdownMenuItem(
-                            text = { Text("Settings") },
-                            leadingIcon = { Icon(Icons.Default.Settings, null) },
-                            onClick = { screen = Screen.Settings; menuExpanded = false }
-                        )
-                        DropdownMenuItem(
-                            text = { Text("About") },
-                            leadingIcon = { Icon(Icons.Default.Info, null) },
-                            onClick = { screen = Screen.About; menuExpanded = false }
+                        Icon(
+                            painter = painterResource(id = R.drawable.ic_launcher_foreground),
+                            contentDescription = null,
+                            tint = Color.Unspecified,
+                            modifier = Modifier.fillMaxSize()
                         )
                     }
+                    Spacer(modifier = Modifier.width(10.dp))
+                    Text(
+                        text = "Currency Calculator",
+                        color = colors.textPrimary,
+                        fontSize = 18.sp,
+                        fontWeight = FontWeight.SemiBold
+                    )
+                    Spacer(modifier = Modifier.weight(1f))
+                    if (screen == Screen.Calculator) {
+                        Box {
+                            IconButton(onClick = { menuExpanded = true }) {
+                                Icon(Icons.Default.Menu, contentDescription = "Menu", tint = colors.textPrimary)
+                            }
+                            DropdownMenu(
+                                expanded = menuExpanded,
+                                onDismissRequest = { menuExpanded = false }
+                            ) {
+                                DropdownMenuItem(
+                                    text = { Text("History") },
+                                    leadingIcon = { Icon(Icons.Default.History, null) },
+                                    onClick = { screen = Screen.History; menuExpanded = false }
+                                )
+                                DropdownMenuItem(
+                                    text = { Text("Settings") },
+                                    leadingIcon = { Icon(Icons.Default.Settings, null) },
+                                    onClick = { screen = Screen.Settings; menuExpanded = false }
+                                )
+                                DropdownMenuItem(
+                                    text = { Text("About") },
+                                    leadingIcon = { Icon(Icons.Default.Info, null) },
+                                    onClick = { screen = Screen.About; menuExpanded = false }
+                                )
+                            }
+                        }
+                    } else {
+                        IconButton(onClick = { screen = Screen.Calculator }) {
+                            Icon(Icons.Default.Close, contentDescription = "Back to calculator", tint = colors.textPrimary)
+                        }
+                    }
                 }
-            } else {
-                IconButton(onClick = { screen = Screen.Calculator }) {
-                    Icon(Icons.Default.Close, contentDescription = "Back to calculator", tint = Color.White)
+
+                HorizontalDivider(color = colors.divider, thickness = 1.dp)
+
+                when (screen) {
+                    Screen.Calculator -> CalculatorScreen(vm = vm, modifier = Modifier.weight(1f))
+                    Screen.History    -> HistoryScreen(vm = vm, modifier = Modifier.weight(1f), onEntryRestored = { screen = Screen.Calculator })
+                    Screen.About      -> AboutScreen(modifier = Modifier.weight(1f))
+                    Screen.Settings   -> SettingsScreen(vm = vm, modifier = Modifier.weight(1f))
                 }
             }
-        }
-
-        HorizontalDivider(color = Color(0xFF2C2C2E), thickness = 1.dp)
-
-        when (screen) {
-            Screen.Calculator -> CalculatorScreen(vm = vm, modifier = Modifier.weight(1f))
-            Screen.History -> HistoryScreen(vm = vm, modifier = Modifier.weight(1f), onEntryRestored = { screen = Screen.Calculator })
-            Screen.About -> AboutScreen(modifier = Modifier.weight(1f))
-            Screen.Settings -> SettingsScreen(vm = vm, modifier = Modifier.weight(1f))
         }
     }
 }
@@ -156,6 +165,7 @@ fun AppScreen() {
 @Composable
 fun AboutScreen(modifier: Modifier = Modifier) {
     val context = LocalContext.current
+    val colors = LocalAppColors.current
 
     Column(
         modifier = modifier
@@ -182,24 +192,15 @@ fun AboutScreen(modifier: Modifier = Modifier) {
 
         Spacer(Modifier.height(20.dp))
 
-        Text(
-            text = "Currency Calc",
-            color = Color.White,
-            fontSize = 26.sp,
-            fontWeight = FontWeight.Bold
-        )
-        Text(
-            text = "Version 1.0",
-            color = Color(0xFF8E8E93),
-            fontSize = 13.sp
-        )
+        Text(text = "Currency Calc", color = colors.textPrimary, fontSize = 26.sp, fontWeight = FontWeight.Bold)
+        Text(text = "Version 1.0", color = colors.textSecondary, fontSize = 13.sp)
 
         Spacer(Modifier.height(32.dp))
 
         Text(
             text = "A simple, ad-free calculator with live dual-currency conversion. " +
                     "Enter any amount and see the equivalent in your chosen currency pair as you type.",
-            color = Color(0xFFAEAEB2),
+            color = colors.textSecondary,
             fontSize = 15.sp,
             textAlign = TextAlign.Center,
             lineHeight = 22.sp
@@ -209,7 +210,7 @@ fun AboutScreen(modifier: Modifier = Modifier) {
 
         Text(
             text = "Exchange rates from open.er-api.com\nUpdated every 24 hours · 161 currencies",
-            color = Color(0xFF636366),
+            color = colors.textMuted,
             fontSize = 13.sp,
             textAlign = TextAlign.Center,
             lineHeight = 20.sp
@@ -219,9 +220,7 @@ fun AboutScreen(modifier: Modifier = Modifier) {
 
         OutlinedButton(
             onClick = {
-                context.startActivity(
-                    Intent(Intent.ACTION_VIEW, Uri.parse("https://buymeacoffee.com/rww_100"))
-                )
+                context.startActivity(Intent(Intent.ACTION_VIEW, Uri.parse("https://buymeacoffee.com/rww_100")))
             },
             modifier = Modifier.fillMaxWidth(),
             shape = RoundedCornerShape(10.dp),
@@ -235,14 +234,12 @@ fun AboutScreen(modifier: Modifier = Modifier) {
 
         OutlinedButton(
             onClick = {
-                context.startActivity(
-                    Intent(Intent.ACTION_VIEW, Uri.parse("https://github.com/richw100/android-currency-calculator"))
-                )
+                context.startActivity(Intent(Intent.ACTION_VIEW, Uri.parse("https://github.com/richw100/android-currency-calculator")))
             },
             modifier = Modifier.fillMaxWidth(),
             shape = RoundedCornerShape(10.dp),
-            colors = ButtonDefaults.outlinedButtonColors(contentColor = Color(0xFF8E8E93)),
-            border = androidx.compose.foundation.BorderStroke(1.dp, Color(0xFF48484A))
+            colors = ButtonDefaults.outlinedButtonColors(contentColor = colors.textSecondary),
+            border = androidx.compose.foundation.BorderStroke(1.dp, colors.divider)
         ) {
             Text("View on GitHub", fontSize = 15.sp, modifier = Modifier.padding(vertical = 4.dp))
         }
@@ -257,6 +254,7 @@ fun AboutScreen(modifier: Modifier = Modifier) {
 @Composable
 fun CalculatorScreen(vm: CalculatorViewModel = viewModel(), modifier: Modifier = Modifier) {
     val state by vm.uiState.collectAsStateWithLifecycle()
+    val colors = LocalAppColors.current
     val context = LocalContext.current
     val clipboard = LocalClipboardManager.current
     var showRefreshDialog by remember { mutableStateOf(false) }
@@ -316,11 +314,7 @@ fun CalculatorScreen(vm: CalculatorViewModel = viewModel(), modifier: Modifier =
                 modifier = Modifier.weight(1f)
             )
             IconButton(onClick = { vm.onAction(CalculatorAction.SwapCurrencies) }) {
-                Icon(
-                    imageVector = Icons.Default.SwapHoriz,
-                    contentDescription = "Swap currencies",
-                    tint = Color(0xFF8E8E93)
-                )
+                Icon(imageVector = Icons.Default.SwapHoriz, contentDescription = "Swap currencies", tint = colors.textSecondary)
             }
             CurrencySelector(
                 label = "To",
@@ -345,11 +339,7 @@ fun CalculatorScreen(vm: CalculatorViewModel = viewModel(), modifier: Modifier =
         ) {
             Column(modifier = Modifier.weight(1f)) {
                 if (state.exchangeRateLabel.isNotEmpty()) {
-                    Text(
-                        text = state.exchangeRateLabel,
-                        color = Color(0xFF8E8E93),
-                        fontSize = 12.sp
-                    )
+                    Text(text = state.exchangeRateLabel, color = colors.textSecondary, fontSize = 12.sp)
                 }
                 state.customRatePctDiff?.let { pct ->
                     val isAbove = pct >= 0
@@ -359,7 +349,7 @@ fun CalculatorScreen(vm: CalculatorViewModel = viewModel(), modifier: Modifier =
                     val liveText = liveRate?.let { " (live: ${"%.4f".format(it)})" } ?: ""
                     Text(
                         text = "$pctText$liveText",
-                        color = if (isAbove) Color(0xFF34C759) else Color(0xFFFF3B30),
+                        color = if (isAbove) colors.positiveColor else colors.negativeColor,
                         fontSize = 11.sp
                     )
                 }
@@ -368,14 +358,14 @@ fun CalculatorScreen(vm: CalculatorViewModel = viewModel(), modifier: Modifier =
                         Icon(
                             imageVector = Icons.Default.WifiOff,
                             contentDescription = "Offline",
-                            tint = Color(0xFFFF9F0A),
+                            tint = colors.warningColor,
                             modifier = Modifier.size(11.dp)
                         )
                         Spacer(Modifier.width(3.dp))
                     }
                     Text(
                         text = state.lastUpdated,
-                        color = if (state.isOffline) Color(0xFFFF9F0A) else Color(0xFF8E8E93),
+                        color = if (state.isOffline) colors.warningColor else colors.textSecondary,
                         fontSize = 11.sp
                     )
                 }
@@ -390,18 +380,9 @@ fun CalculatorScreen(vm: CalculatorViewModel = viewModel(), modifier: Modifier =
                 enabled = !state.isRefreshing
             ) {
                 if (state.isRefreshing) {
-                    CircularProgressIndicator(
-                        modifier = Modifier.size(18.dp),
-                        color = Color(0xFF8E8E93),
-                        strokeWidth = 2.dp
-                    )
+                    CircularProgressIndicator(modifier = Modifier.size(18.dp), color = colors.textSecondary, strokeWidth = 2.dp)
                 } else {
-                    Icon(
-                        imageVector = Icons.Default.Refresh,
-                        contentDescription = "Refresh rates",
-                        tint = Color(0xFF8E8E93),
-                        modifier = Modifier.size(20.dp)
-                    )
+                    Icon(imageVector = Icons.Default.Refresh, contentDescription = "Refresh rates", tint = colors.textSecondary, modifier = Modifier.size(20.dp))
                 }
             }
         }
@@ -411,32 +392,20 @@ fun CalculatorScreen(vm: CalculatorViewModel = viewModel(), modifier: Modifier =
         // Currency conversion display
         val shareText = "${currencyFlag(state.fromCurrency)} ${state.fromAmount} = ${currencyFlag(state.toCurrency)} ${state.toAmount}"
         Column(
-            modifier = Modifier
-                .fillMaxWidth()
-                .padding(horizontal = 20.dp, vertical = 4.dp),
+            modifier = Modifier.fillMaxWidth().padding(horizontal = 20.dp, vertical = 4.dp),
             horizontalAlignment = Alignment.End
         ) {
-            CopyableAmount(
-                text = "${currencyFlag(state.fromCurrency)} ${state.fromAmount}",
-                color = Color(0xFF0A84FF),
-                shareText = shareText
-            )
-            CopyableAmount(
-                text = "${currencyFlag(state.toCurrency)} ${state.toAmount}",
-                color = Color(0xFF34C759),
-                shareText = shareText
-            )
+            CopyableAmount(text = "${currencyFlag(state.fromCurrency)} ${state.fromAmount}", color = colors.fromAmountColor, shareText = shareText)
+            CopyableAmount(text = "${currencyFlag(state.toCurrency)} ${state.toAmount}", color = colors.toAmountColor, shareText = shareText)
         }
 
         // Expression line
         if (state.expression.isNotEmpty()) {
             Text(
                 text = state.expression,
-                color = Color(0xFF8E8E93),
+                color = colors.textSecondary,
                 fontSize = 26.sp,
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .padding(horizontal = 24.dp),
+                modifier = Modifier.fillMaxWidth().padding(horizontal = 24.dp),
                 textAlign = TextAlign.End
             )
         }
@@ -445,7 +414,7 @@ fun CalculatorScreen(vm: CalculatorViewModel = viewModel(), modifier: Modifier =
         Box {
             Text(
                 text = if (state.isError) "Error" else state.display,
-                color = Color.White,
+                color = colors.textPrimary,
                 fontSize = 72.sp,
                 fontWeight = FontWeight.Light,
                 modifier = Modifier
@@ -462,16 +431,10 @@ fun CalculatorScreen(vm: CalculatorViewModel = viewModel(), modifier: Modifier =
                     clipText?.let { Regex("-?\\d+(?:[.,]\\d+)*(?:\\.\\d+)?").find(it)?.value?.replace(",", "") }
                         ?.takeIf { it.toDoubleOrNull() != null }
                 }
-                DropdownMenu(
-                    expanded = displayMenuExpanded,
-                    onDismissRequest = { displayMenuExpanded = false }
-                ) {
+                DropdownMenu(expanded = displayMenuExpanded, onDismissRequest = { displayMenuExpanded = false }) {
                     DropdownMenuItem(
                         text = { Text("Copy") },
-                        onClick = {
-                            clipboard.setText(AnnotatedString(state.display))
-                            displayMenuExpanded = false
-                        }
+                        onClick = { clipboard.setText(AnnotatedString(state.display)); displayMenuExpanded = false }
                     )
                     DropdownMenuItem(
                         text = { Text("Share") },
@@ -480,12 +443,8 @@ fun CalculatorScreen(vm: CalculatorViewModel = viewModel(), modifier: Modifier =
                                 Intent.createChooser(
                                     Intent(Intent.ACTION_SEND).apply {
                                         type = "text/plain"
-                                        putExtra(
-                                            Intent.EXTRA_TEXT,
-                                            "${state.display} ${state.fromCurrency} = ${state.toAmount}"
-                                        )
-                                    },
-                                    null
+                                        putExtra(Intent.EXTRA_TEXT, "${state.display} ${state.fromCurrency} = ${state.toAmount}")
+                                    }, null
                                 )
                             )
                             displayMenuExpanded = false
@@ -494,10 +453,7 @@ fun CalculatorScreen(vm: CalculatorViewModel = viewModel(), modifier: Modifier =
                     if (pasteNumber != null) {
                         DropdownMenuItem(
                             text = { Text("Paste $pasteNumber") },
-                            onClick = {
-                                vm.onAction(CalculatorAction.PasteValue(pasteNumber))
-                                displayMenuExpanded = false
-                            }
+                            onClick = { vm.onAction(CalculatorAction.PasteValue(pasteNumber)); displayMenuExpanded = false }
                         )
                     }
                 }
@@ -512,23 +468,13 @@ fun CalculatorScreen(vm: CalculatorViewModel = viewModel(), modifier: Modifier =
         )
 
         OutlinedButton(
-            onClick = {
-                context.startActivity(
-                    Intent(Intent.ACTION_VIEW, Uri.parse("https://buymeacoffee.com/rww_100"))
-                )
-            },
-            modifier = Modifier
-                .fillMaxWidth()
-                .padding(horizontal = 8.dp, vertical = 4.dp),
+            onClick = { context.startActivity(Intent(Intent.ACTION_VIEW, Uri.parse("https://buymeacoffee.com/rww_100"))) },
+            modifier = Modifier.fillMaxWidth().padding(horizontal = 8.dp, vertical = 4.dp),
             shape = RoundedCornerShape(10.dp),
-            colors = ButtonDefaults.outlinedButtonColors(contentColor = Color(0xFFFF9F0A)),
-            border = androidx.compose.foundation.BorderStroke(1.dp, Color(0xFFFF9F0A))
+            colors = ButtonDefaults.outlinedButtonColors(contentColor = colors.promoColor),
+            border = androidx.compose.foundation.BorderStroke(1.dp, colors.promoColor)
         ) {
-            Text(
-                text = "Like using this ad-free app? Buy me a coffee to say thanks! ☕",
-                fontSize = 11.sp,
-                textAlign = TextAlign.Center
-            )
+            Text(text = "Like using this ad-free app? Buy me a coffee to say thanks! ☕", fontSize = 11.sp, textAlign = TextAlign.Center)
         }
 
         Spacer(Modifier.height(4.dp))
@@ -547,6 +493,7 @@ fun CurrencySelector(
     onSelected: (String) -> Unit,
     modifier: Modifier = Modifier
 ) {
+    val colors = LocalAppColors.current
     var expanded by remember { mutableStateOf(false) }
     var search by remember { mutableStateOf("") }
 
@@ -561,40 +508,26 @@ fun CurrencySelector(
             onClick = { expanded = true; search = "" },
             modifier = Modifier.fillMaxWidth(),
             shape = RoundedCornerShape(8.dp),
-            colors = ButtonDefaults.outlinedButtonColors(contentColor = Color.White),
-            border = androidx.compose.foundation.BorderStroke(1.dp, Color(0xFF48484A)),
+            colors = ButtonDefaults.outlinedButtonColors(contentColor = colors.textPrimary),
+            border = androidx.compose.foundation.BorderStroke(1.dp, colors.inputBorder),
             contentPadding = PaddingValues(horizontal = 8.dp, vertical = 4.dp)
         ) {
             Text(
                 "$label: ${currencyFlag(selected)} $selected${if (customRates.containsKey(selected)) " ★" else ""}",
-                fontSize = 13.sp,
-                maxLines = 1
+                fontSize = 13.sp, maxLines = 1
             )
         }
-        DropdownMenu(
-            expanded = expanded,
-            onDismissRequest = { expanded = false },
-            modifier = Modifier.heightIn(max = 360.dp)
-        ) {
+        DropdownMenu(expanded = expanded, onDismissRequest = { expanded = false }, modifier = Modifier.heightIn(max = 360.dp)) {
             OutlinedTextField(
                 value = search,
                 onValueChange = { search = it },
                 placeholder = { Text("Search...", fontSize = 13.sp) },
-                modifier = Modifier
-                    .padding(horizontal = 8.dp, vertical = 4.dp)
-                    .fillMaxWidth(),
+                modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp).fillMaxWidth(),
                 singleLine = true
             )
-
-            // Recent currencies section
             val filteredRecents = recentCurrencies.filter { matches(it) }
             if (filteredRecents.isNotEmpty()) {
-                Text(
-                    text = "RECENT",
-                    fontSize = 10.sp,
-                    color = Color(0xFF8E8E93),
-                    modifier = Modifier.padding(horizontal = 16.dp, vertical = 4.dp)
-                )
+                Text(text = "RECENT", fontSize = 10.sp, color = colors.textSecondary, modifier = Modifier.padding(horizontal = 16.dp, vertical = 4.dp))
                 filteredRecents.forEach { code ->
                     val name = try { JavaCurrency.getInstance(code).displayName } catch (e: Exception) { code }
                     DropdownMenuItem(
@@ -604,11 +537,9 @@ fun CurrencySelector(
                                 Spacer(Modifier.width(10.dp))
                                 Column(modifier = Modifier.weight(1f)) {
                                     Text(code, fontSize = 14.sp, fontWeight = FontWeight.Medium)
-                                    Text(name, fontSize = 11.sp, color = Color(0xFF8E8E93))
+                                    Text(name, fontSize = 11.sp, color = colors.textSecondary)
                                 }
-                                if (customRates.containsKey(code)) {
-                                    Text("★", color = Color(0xFFFF9F0A), fontSize = 12.sp)
-                                }
+                                if (customRates.containsKey(code)) Text("★", color = colors.warningColor, fontSize = 12.sp)
                             }
                         },
                         onClick = { onSelected(code); expanded = false }
@@ -616,30 +547,24 @@ fun CurrencySelector(
                 }
                 HorizontalDivider(modifier = Modifier.padding(vertical = 4.dp))
             }
-
-            // Full sorted list (excluding recents to avoid duplication)
             val recentSet = recentCurrencies.toSet()
-            available
-                .filter { it !in recentSet && matches(it) }
-                .forEach { code ->
-                    val name = try { JavaCurrency.getInstance(code).displayName } catch (e: Exception) { code }
-                    DropdownMenuItem(
-                        text = {
-                            Row(verticalAlignment = Alignment.CenterVertically) {
-                                Text(currencyFlag(code), fontSize = 22.sp)
-                                Spacer(Modifier.width(10.dp))
-                                Column(modifier = Modifier.weight(1f)) {
-                                    Text(code, fontSize = 14.sp, fontWeight = FontWeight.Medium)
-                                    Text(name, fontSize = 11.sp, color = Color(0xFF8E8E93))
-                                }
-                                if (customRates.containsKey(code)) {
-                                    Text("★", color = Color(0xFFFF9F0A), fontSize = 12.sp)
-                                }
+            available.filter { it !in recentSet && matches(it) }.forEach { code ->
+                val name = try { JavaCurrency.getInstance(code).displayName } catch (e: Exception) { code }
+                DropdownMenuItem(
+                    text = {
+                        Row(verticalAlignment = Alignment.CenterVertically) {
+                            Text(currencyFlag(code), fontSize = 22.sp)
+                            Spacer(Modifier.width(10.dp))
+                            Column(modifier = Modifier.weight(1f)) {
+                                Text(code, fontSize = 14.sp, fontWeight = FontWeight.Medium)
+                                Text(name, fontSize = 11.sp, color = colors.textSecondary)
                             }
-                        },
-                        onClick = { onSelected(code); expanded = false }
-                    )
-                }
+                            if (customRates.containsKey(code)) Text("★", color = colors.warningColor, fontSize = 12.sp)
+                        }
+                    },
+                    onClick = { onSelected(code); expanded = false }
+                )
+            }
         }
     }
 }
@@ -659,30 +584,18 @@ private fun CopyableAmount(text: String, color: Color, shareText: String) {
             color = color,
             fontSize = 20.sp,
             fontWeight = FontWeight.Medium,
-            modifier = Modifier.combinedClickable(
-                onClick = {},
-                onLongClick = { menuExpanded = true }
-            )
+            modifier = Modifier.combinedClickable(onClick = {}, onLongClick = { menuExpanded = true })
         )
         DropdownMenu(expanded = menuExpanded, onDismissRequest = { menuExpanded = false }) {
             DropdownMenuItem(
                 text = { Text("Copy") },
-                onClick = {
-                    clipboard.setText(AnnotatedString(text))
-                    menuExpanded = false
-                }
+                onClick = { clipboard.setText(AnnotatedString(text)); menuExpanded = false }
             )
             DropdownMenuItem(
                 text = { Text("Share") },
                 onClick = {
                     context.startActivity(
-                        Intent.createChooser(
-                            Intent(Intent.ACTION_SEND).apply {
-                                type = "text/plain"
-                                putExtra(Intent.EXTRA_TEXT, shareText)
-                            },
-                            null
-                        )
+                        Intent.createChooser(Intent(Intent.ACTION_SEND).apply { type = "text/plain"; putExtra(Intent.EXTRA_TEXT, shareText) }, null)
                     )
                     menuExpanded = false
                 }
@@ -700,46 +613,28 @@ private fun CustomRateWarningDialog(
     onKeep: () -> Unit,
     onClear: () -> Unit
 ) {
+    val colors = LocalAppColors.current
     AlertDialog(
         onDismissRequest = onKeep,
-        containerColor = Color(0xFF1C1C1E),
-        title = { Text("Custom Rate Active ★", color = Color.White) },
+        containerColor = colors.surface,
+        title = { Text("Custom Rate Active ★", color = colors.textPrimary) },
         text = {
             Column {
                 Row(verticalAlignment = Alignment.CenterVertically) {
                     Text(currencyFlag(entry.base), fontSize = 20.sp)
-                    Text(" → ", color = Color(0xFF8E8E93), fontSize = 13.sp)
+                    Text(" → ", color = colors.textSecondary, fontSize = 13.sp)
                     Text(currencyFlag(currency), fontSize = 20.sp)
                     Spacer(Modifier.width(8.dp))
-                    Text(
-                        "1 ${entry.base} = ${"%.4f".format(entry.rate)} $currency",
-                        color = Color(0xFFFF9F0A),
-                        fontSize = 13.sp,
-                        fontWeight = FontWeight.Medium
-                    )
+                    Text("1 ${entry.base} = ${"%.4f".format(entry.rate)} $currency", color = colors.warningColor, fontSize = 13.sp, fontWeight = FontWeight.Medium)
                 }
                 Spacer(Modifier.height(10.dp))
-                Text(
-                    "$currency has a custom rate override. The conversion will use this instead of the live rate.",
-                    color = Color(0xFFAEAEB2),
-                    fontSize = 13.sp,
-                    lineHeight = 18.sp
-                )
+                Text("$currency has a custom rate override. The conversion will use this instead of the live rate.", color = colors.textSecondary, fontSize = 13.sp, lineHeight = 18.sp)
             }
         },
-        confirmButton = {
-            TextButton(onClick = onClear) {
-                Text("Clear rate", color = Color(0xFFFF3B30))
-            }
-        },
-        dismissButton = {
-            TextButton(onClick = onKeep) {
-                Text("Keep", color = Color(0xFF0A84FF))
-            }
-        }
+        confirmButton = { TextButton(onClick = onClear) { Text("Clear rate", color = colors.errorColor) } },
+        dismissButton = { TextButton(onClick = onKeep) { Text("Keep", color = colors.fromAmountColor) } }
     )
 }
-
 
 @Composable
 private fun RefreshCustomRateDialog(
@@ -748,63 +643,44 @@ private fun RefreshCustomRateDialog(
     onDropAndRefresh: () -> Unit,
     onDismiss: () -> Unit
 ) {
+    val colors = LocalAppColors.current
     val activeEntries = buildList {
         state.customRates[state.fromCurrency]?.let { add(state.fromCurrency to it) }
         state.customRates[state.toCurrency]?.let {
-            // avoid duplicating if from == to somehow
             if (state.toCurrency != state.fromCurrency) add(state.toCurrency to it)
         }
     }
 
     AlertDialog(
         onDismissRequest = onDismiss,
-        containerColor = Color(0xFF1C1C1E),
-        title = { Text("Custom Rate Active ★", color = Color.White) },
+        containerColor = colors.surface,
+        title = { Text("Custom Rate Active ★", color = colors.textPrimary) },
         text = {
             Column {
                 Text(
                     "The following custom rate override${if (activeEntries.size > 1) "s are" else " is"} in use:",
-                    color = Color(0xFFAEAEB2),
-                    fontSize = 14.sp
+                    color = colors.textSecondary, fontSize = 14.sp
                 )
                 Spacer(Modifier.height(10.dp))
                 activeEntries.forEach { (target, entry) ->
                     Row(verticalAlignment = Alignment.CenterVertically) {
                         Text(currencyFlag(entry.base), fontSize = 18.sp)
-                        Text(" → ", color = Color(0xFF8E8E93), fontSize = 13.sp)
+                        Text(" → ", color = colors.textSecondary, fontSize = 13.sp)
                         Text(currencyFlag(target), fontSize = 18.sp)
                         Spacer(Modifier.width(6.dp))
-                        Text(
-                            "1 ${entry.base} = ${"%.4f".format(entry.rate)} $target",
-                            color = Color(0xFFFF9F0A),
-                            fontSize = 13.sp,
-                            fontWeight = FontWeight.Medium
-                        )
+                        Text("1 ${entry.base} = ${"%.4f".format(entry.rate)} $target", color = colors.warningColor, fontSize = 13.sp, fontWeight = FontWeight.Medium)
                     }
                     Spacer(Modifier.height(4.dp))
                 }
                 Spacer(Modifier.height(8.dp))
-                Text(
-                    "Refreshing will fetch the latest live rates. Your custom override will stay active unless you drop it.",
-                    color = Color(0xFF636366),
-                    fontSize = 12.sp,
-                    lineHeight = 17.sp
-                )
+                Text("Refreshing will fetch the latest live rates. Your custom override will stay active unless you drop it.", color = colors.textMuted, fontSize = 12.sp, lineHeight = 17.sp)
             }
         },
-        confirmButton = {
-            TextButton(onClick = onDropAndRefresh) {
-                Text("Drop & Refresh", color = Color(0xFFFF3B30))
-            }
-        },
+        confirmButton = { TextButton(onClick = onDropAndRefresh) { Text("Drop & Refresh", color = colors.errorColor) } },
         dismissButton = {
             Row {
-                TextButton(onClick = onDismiss) {
-                    Text("Cancel", color = Color(0xFF8E8E93))
-                }
-                TextButton(onClick = onKeepAndRefresh) {
-                    Text("Keep & Refresh", color = Color(0xFF0A84FF))
-                }
+                TextButton(onClick = onDismiss) { Text("Cancel", color = colors.textSecondary) }
+                TextButton(onClick = onKeepAndRefresh) { Text("Keep & Refresh", color = colors.fromAmountColor) }
             }
         }
     )
@@ -812,53 +688,45 @@ private fun RefreshCustomRateDialog(
 
 // ── Button grid ───────────────────────────────────────────────────────────────
 
-private data class BtnDef(
-    val label: String,
-    val bg: Color,
-    val fg: Color = Color.White,
-    val action: CalculatorAction
-)
+private data class BtnDef(val label: String, val bg: Color, val fg: Color = Color.White, val action: CalculatorAction)
 
 @Composable
 fun ButtonGrid(onAction: (CalculatorAction) -> Unit, hapticEnabled: Boolean = true, modifier: Modifier = Modifier) {
+    val colors = LocalAppColors.current
+
     val rows = listOf(
         listOf(
-            BtnDef("AC", ButtonLight, Color.Black, CalculatorAction.Clear),
-            BtnDef("( )", ButtonLight, Color.Black, CalculatorAction.SmartBracket),
-            BtnDef("%", ButtonLight, Color.Black, CalculatorAction.Percent),
-            BtnDef("÷", ButtonOrange, action = CalculatorAction.Operation('/'))
+            BtnDef("AC",  colors.buttonFunction, colors.buttonFunctionContent, CalculatorAction.Clear),
+            BtnDef("( )", colors.buttonFunction, colors.buttonFunctionContent, CalculatorAction.SmartBracket),
+            BtnDef("%",   colors.buttonFunction, colors.buttonFunctionContent, CalculatorAction.Percent),
+            BtnDef("÷",   colors.operator,       colors.operatorContent,       CalculatorAction.Operation('/'))
         ),
         listOf(
-            BtnDef("7", ButtonDark, action = CalculatorAction.Digit(7)),
-            BtnDef("8", ButtonDark, action = CalculatorAction.Digit(8)),
-            BtnDef("9", ButtonDark, action = CalculatorAction.Digit(9)),
-            BtnDef("×", ButtonOrange, action = CalculatorAction.Operation('*'))
+            BtnDef("7", colors.buttonDigit, colors.buttonDigitContent, CalculatorAction.Digit(7)),
+            BtnDef("8", colors.buttonDigit, colors.buttonDigitContent, CalculatorAction.Digit(8)),
+            BtnDef("9", colors.buttonDigit, colors.buttonDigitContent, CalculatorAction.Digit(9)),
+            BtnDef("×", colors.operator,   colors.operatorContent,    CalculatorAction.Operation('*'))
         ),
         listOf(
-            BtnDef("4", ButtonDark, action = CalculatorAction.Digit(4)),
-            BtnDef("5", ButtonDark, action = CalculatorAction.Digit(5)),
-            BtnDef("6", ButtonDark, action = CalculatorAction.Digit(6)),
-            BtnDef("−", ButtonOrange, action = CalculatorAction.Operation('-'))
+            BtnDef("4", colors.buttonDigit, colors.buttonDigitContent, CalculatorAction.Digit(4)),
+            BtnDef("5", colors.buttonDigit, colors.buttonDigitContent, CalculatorAction.Digit(5)),
+            BtnDef("6", colors.buttonDigit, colors.buttonDigitContent, CalculatorAction.Digit(6)),
+            BtnDef("−", colors.operator,   colors.operatorContent,    CalculatorAction.Operation('-'))
         ),
         listOf(
-            BtnDef("1", ButtonDark, action = CalculatorAction.Digit(1)),
-            BtnDef("2", ButtonDark, action = CalculatorAction.Digit(2)),
-            BtnDef("3", ButtonDark, action = CalculatorAction.Digit(3)),
-            BtnDef("+", ButtonOrange, action = CalculatorAction.Operation('+'))
+            BtnDef("1", colors.buttonDigit, colors.buttonDigitContent, CalculatorAction.Digit(1)),
+            BtnDef("2", colors.buttonDigit, colors.buttonDigitContent, CalculatorAction.Digit(2)),
+            BtnDef("3", colors.buttonDigit, colors.buttonDigitContent, CalculatorAction.Digit(3)),
+            BtnDef("+", colors.operator,   colors.operatorContent,    CalculatorAction.Operation('+'))
         )
     )
 
     Column(modifier = modifier) {
         rows.forEach { row ->
-            Row(
-                modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.spacedBy(8.dp)
-            ) {
+            Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                 row.forEach { btn ->
                     CalcButton(
-                        label = btn.label,
-                        bg = btn.bg,
-                        fg = btn.fg,
+                        label = btn.label, bg = btn.bg, fg = btn.fg,
                         hapticEnabled = hapticEnabled,
                         onClick = { onAction(btn.action) },
                         modifier = Modifier.weight(1f)
@@ -868,14 +736,11 @@ fun ButtonGrid(onAction: (CalculatorAction) -> Unit, hapticEnabled: Boolean = tr
             Spacer(modifier = Modifier.height(8.dp))
         }
         // Bottom row: 0, ., ⌫, =
-        Row(
-            modifier = Modifier.fillMaxWidth(),
-            horizontalArrangement = Arrangement.spacedBy(8.dp)
-        ) {
-            CalcButton("0", ButtonDark, hapticEnabled = hapticEnabled, onClick = { onAction(CalculatorAction.Digit(0)) }, modifier = Modifier.weight(1f))
-            CalcButton(".", ButtonDark, hapticEnabled = hapticEnabled, onClick = { onAction(CalculatorAction.Decimal) }, modifier = Modifier.weight(1f))
-            CalcButton("⌫", ButtonDark, hapticEnabled = hapticEnabled, onClick = { onAction(CalculatorAction.Delete) }, modifier = Modifier.weight(1f))
-            CalcButton("=", ButtonOrange, hapticEnabled = hapticEnabled, onClick = { onAction(CalculatorAction.Calculate) }, modifier = Modifier.weight(1f))
+        Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+            CalcButton("0", colors.buttonDigit, fg = colors.buttonDigitContent, hapticEnabled = hapticEnabled, onClick = { onAction(CalculatorAction.Digit(0)) },   modifier = Modifier.weight(1f))
+            CalcButton(".", colors.buttonDigit, fg = colors.buttonDigitContent, hapticEnabled = hapticEnabled, onClick = { onAction(CalculatorAction.Decimal) },    modifier = Modifier.weight(1f))
+            CalcButton("⌫", colors.buttonDigit, fg = colors.buttonDigitContent, hapticEnabled = hapticEnabled, onClick = { onAction(CalculatorAction.Delete) },     modifier = Modifier.weight(1f))
+            CalcButton("=", colors.equals,      fg = colors.equalsContent,      hapticEnabled = hapticEnabled, onClick = { onAction(CalculatorAction.Calculate) },  modifier = Modifier.weight(1f))
         }
         Spacer(modifier = Modifier.height(8.dp))
     }

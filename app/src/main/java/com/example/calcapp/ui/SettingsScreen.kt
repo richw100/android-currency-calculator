@@ -1,19 +1,25 @@
 package com.example.calcapp.ui
 
 import androidx.compose.foundation.BorderStroke
+import androidx.compose.foundation.background
+import androidx.compose.foundation.border
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Add
+import androidx.compose.material.icons.filled.Check
 import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.Edit
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.KeyboardType
@@ -22,9 +28,11 @@ import androidx.compose.ui.unit.sp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import java.util.Currency as JavaCurrency
 
+@OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun SettingsScreen(vm: CalculatorViewModel, modifier: Modifier = Modifier) {
     val state by vm.uiState.collectAsStateWithLifecycle()
+    val colors = LocalAppColors.current
     var showDialog by remember { mutableStateOf(false) }
     var editingTarget by remember { mutableStateOf("") }
 
@@ -52,60 +60,95 @@ fun SettingsScreen(vm: CalculatorViewModel, modifier: Modifier = Modifier) {
             .verticalScroll(rememberScrollState())
             .padding(horizontal = 20.dp, vertical = 16.dp)
     ) {
-        Text(
-            text = "GENERAL",
-            fontSize = 12.sp,
-            color = Color(0xFF8E8E93),
-            fontWeight = FontWeight.Medium,
-            modifier = Modifier.padding(bottom = 8.dp)
-        )
+        // ── Appearance ──────────────────────────────────────────────────────
+        Text("APPEARANCE", fontSize = 12.sp, color = colors.textSecondary, fontWeight = FontWeight.Medium, modifier = Modifier.padding(bottom = 8.dp))
 
-        Card(
-            modifier = Modifier.fillMaxWidth(),
-            colors = CardDefaults.cardColors(containerColor = Color(0xFF2C2C2E))
-        ) {
+        Card(modifier = Modifier.fillMaxWidth(), colors = CardDefaults.cardColors(containerColor = colors.surface)) {
+            Column(modifier = Modifier.padding(horizontal = 16.dp, vertical = 14.dp)) {
+                Text("Appearance mode", color = colors.textPrimary, fontSize = 15.sp)
+                Text("Override system dark/light setting", color = colors.textSecondary, fontSize = 12.sp)
+                Spacer(Modifier.height(10.dp))
+                SingleChoiceSegmentedButtonRow(modifier = Modifier.fillMaxWidth()) {
+                    DarkModePref.values().forEachIndexed { index, pref ->
+                        SegmentedButton(
+                            selected = state.darkModePref == pref,
+                            onClick = { vm.onAction(CalculatorAction.SetDarkMode(pref)) },
+                            shape = SegmentedButtonDefaults.itemShape(index = index, count = DarkModePref.values().size)
+                        ) {
+                            Text(pref.label, fontSize = 13.sp)
+                        }
+                    }
+                }
+
+                HorizontalDivider(modifier = Modifier.padding(vertical = 14.dp), color = colors.divider)
+
+                Text("Accent colour", color = colors.textPrimary, fontSize = 15.sp)
+                Text("Button colour scheme", color = colors.textSecondary, fontSize = 12.sp)
+                Spacer(Modifier.height(12.dp))
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.SpaceEvenly
+                ) {
+                    AccentScheme.values().forEach { scheme ->
+                        val isSelected = state.accentScheme == scheme
+                        Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                            Box(
+                                modifier = Modifier
+                                    .size(44.dp)
+                                    .clip(CircleShape)
+                                    .background(scheme.swatch)
+                                    .then(
+                                        if (isSelected) Modifier.border(3.dp, colors.textPrimary, CircleShape)
+                                        else Modifier
+                                    )
+                                    .clickable { vm.onAction(CalculatorAction.SetAccentScheme(scheme)) },
+                                contentAlignment = Alignment.Center
+                            ) {
+                                if (isSelected) {
+                                    Icon(Icons.Default.Check, contentDescription = null, tint = Color.White, modifier = Modifier.size(22.dp))
+                                }
+                            }
+                            Spacer(Modifier.height(4.dp))
+                            Text(scheme.label, fontSize = 11.sp, color = colors.textSecondary)
+                        }
+                    }
+                }
+            }
+        }
+
+        Spacer(Modifier.height(24.dp))
+
+        // ── General ──────────────────────────────────────────────────────────
+        Text("GENERAL", fontSize = 12.sp, color = colors.textSecondary, fontWeight = FontWeight.Medium, modifier = Modifier.padding(bottom = 8.dp))
+
+        Card(modifier = Modifier.fillMaxWidth(), colors = CardDefaults.cardColors(containerColor = colors.surface)) {
             Row(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .padding(horizontal = 16.dp, vertical = 12.dp),
+                modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 12.dp),
                 verticalAlignment = Alignment.CenterVertically
             ) {
                 Column(modifier = Modifier.weight(1f)) {
-                    Text("Haptic feedback", color = Color.White, fontSize = 15.sp)
-                    Text("Vibrate on button tap", color = Color(0xFF8E8E93), fontSize = 12.sp)
+                    Text("Haptic feedback", color = colors.textPrimary, fontSize = 15.sp)
+                    Text("Vibrate on button tap", color = colors.textSecondary, fontSize = 12.sp)
                 }
                 Switch(
                     checked = state.hapticEnabled,
                     onCheckedChange = { vm.onAction(CalculatorAction.SetHaptic(it)) },
-                    colors = SwitchDefaults.colors(checkedThumbColor = Color.White, checkedTrackColor = Color(0xFF34C759))
+                    colors = SwitchDefaults.colors(checkedThumbColor = Color.White, checkedTrackColor = colors.positiveColor)
                 )
             }
         }
 
         Spacer(Modifier.height(24.dp))
 
+        // ── Custom exchange rates ─────────────────────────────────────────────
+        Text("CUSTOM EXCHANGE RATES", fontSize = 12.sp, color = colors.textSecondary, fontWeight = FontWeight.Medium, modifier = Modifier.padding(bottom = 8.dp))
         Text(
-            text = "CUSTOM EXCHANGE RATES",
-            fontSize = 12.sp,
-            color = Color(0xFF8E8E93),
-            fontWeight = FontWeight.Medium,
-            modifier = Modifier.padding(bottom = 8.dp)
-        )
-        Text(
-            text = "Override any live rate with your own value. Useful for locked-in travel money or your bank's specific rate.",
-            fontSize = 13.sp,
-            color = Color(0xFFAEAEB2),
-            lineHeight = 19.sp,
-            modifier = Modifier.padding(bottom = 16.dp)
+            "Override any live rate with your own value. Useful for locked-in travel money or your bank's specific rate.",
+            fontSize = 13.sp, color = colors.textMuted, lineHeight = 19.sp, modifier = Modifier.padding(bottom = 16.dp)
         )
 
         if (state.customRates.isEmpty()) {
-            Text(
-                text = "No custom rates set.",
-                fontSize = 14.sp,
-                color = Color(0xFF636366),
-                modifier = Modifier.padding(vertical = 8.dp)
-            )
+            Text("No custom rates set.", fontSize = 14.sp, color = colors.textMuted, modifier = Modifier.padding(vertical = 8.dp))
         } else {
             state.customRates.entries.sortedBy { it.key }.forEach { (target, entry) ->
                 val targetName = try { JavaCurrency.getInstance(target).displayName } catch (e: Exception) { target }
@@ -117,7 +160,7 @@ fun SettingsScreen(vm: CalculatorViewModel, modifier: Modifier = Modifier) {
 
                 Card(
                     modifier = Modifier.fillMaxWidth().padding(vertical = 4.dp),
-                    colors = CardDefaults.cardColors(containerColor = Color(0xFF2C2C2E))
+                    colors = CardDefaults.cardColors(containerColor = colors.surface)
                 ) {
                     Row(
                         modifier = Modifier.fillMaxWidth().padding(horizontal = 12.dp, vertical = 10.dp),
@@ -126,44 +169,21 @@ fun SettingsScreen(vm: CalculatorViewModel, modifier: Modifier = Modifier) {
                         Column(modifier = Modifier.weight(1f)) {
                             Row(verticalAlignment = Alignment.CenterVertically) {
                                 Text(currencyFlag(entry.base), fontSize = 20.sp)
-                                Text(
-                                    " ${entry.base} → ",
-                                    color = Color(0xFF8E8E93),
-                                    fontSize = 13.sp,
-                                    fontWeight = FontWeight.Medium
-                                )
+                                Text(" ${entry.base} → ", color = colors.textSecondary, fontSize = 13.sp, fontWeight = FontWeight.Medium)
                                 Text(currencyFlag(target), fontSize = 20.sp)
-                                Text(
-                                    " $target",
-                                    color = Color(0xFF8E8E93),
-                                    fontSize = 13.sp,
-                                    fontWeight = FontWeight.Medium
-                                )
+                                Text(" $target", color = colors.textSecondary, fontSize = 13.sp, fontWeight = FontWeight.Medium)
                             }
-                            Text(
-                                "1 ${entry.base} = ${"%.4f".format(entry.rate)} $target",
-                                color = Color(0xFFFF9F0A),
-                                fontSize = 14.sp,
-                                fontWeight = FontWeight.Medium
-                            )
+                            Text("1 ${entry.base} = ${"%.4f".format(entry.rate)} $target", color = colors.warningColor, fontSize = 14.sp, fontWeight = FontWeight.Medium)
                             if (livePairRate != null) {
-                                Text(
-                                    "Live: ${"%.4f".format(livePairRate)}",
-                                    color = Color(0xFF636366),
-                                    fontSize = 11.sp
-                                )
+                                Text("Live: ${"%.4f".format(livePairRate)}", color = colors.textMuted, fontSize = 11.sp)
                             }
-                            Text(
-                                targetName,
-                                color = Color(0xFF636366),
-                                fontSize = 11.sp
-                            )
+                            Text(targetName, color = colors.textMuted, fontSize = 11.sp)
                         }
                         IconButton(onClick = { editingTarget = target; showDialog = true }) {
-                            Icon(Icons.Default.Edit, "Edit", tint = Color(0xFF8E8E93), modifier = Modifier.size(18.dp))
+                            Icon(Icons.Default.Edit, "Edit", tint = colors.textSecondary, modifier = Modifier.size(18.dp))
                         }
                         IconButton(onClick = { vm.onAction(CalculatorAction.ClearCustomRate(target)) }) {
-                            Icon(Icons.Default.Close, "Remove", tint = Color(0xFF8E8E93), modifier = Modifier.size(18.dp))
+                            Icon(Icons.Default.Close, "Remove", tint = colors.textSecondary, modifier = Modifier.size(18.dp))
                         }
                     }
                 }
@@ -176,8 +196,8 @@ fun SettingsScreen(vm: CalculatorViewModel, modifier: Modifier = Modifier) {
             onClick = { editingTarget = ""; showDialog = true },
             modifier = Modifier.fillMaxWidth(),
             shape = RoundedCornerShape(10.dp),
-            colors = ButtonDefaults.outlinedButtonColors(contentColor = Color(0xFF0A84FF)),
-            border = BorderStroke(1.dp, Color(0xFF0A84FF))
+            colors = ButtonDefaults.outlinedButtonColors(contentColor = colors.fromAmountColor),
+            border = BorderStroke(1.dp, colors.fromAmountColor)
         ) {
             Icon(Icons.Default.Add, null, modifier = Modifier.size(18.dp))
             Spacer(Modifier.width(8.dp))
@@ -197,12 +217,12 @@ private fun CustomRateDialog(
     onSave: (base: String, target: String, rate: Double) -> Unit,
     onDismiss: () -> Unit
 ) {
+    val colors = LocalAppColors.current
     val isEditing = initialTarget.isNotEmpty()
     var baseCode by remember { mutableStateOf(initialBase) }
     var targetCode by remember { mutableStateOf(if (isEditing) initialTarget else defaultTarget) }
     var rateInput by remember { mutableStateOf(initialRate) }
 
-    // When both currencies are set and rate is empty, pre-fill with live pair rate
     LaunchedEffect(baseCode, targetCode) {
         if (rateInput.isEmpty() && baseCode.isNotEmpty() && targetCode.isNotEmpty() && baseCode != targetCode) {
             val b = liveRates[baseCode]
@@ -222,37 +242,26 @@ private fun CustomRateDialog(
 
     AlertDialog(
         onDismissRequest = onDismiss,
-        containerColor = Color(0xFF1C1C1E),
-        title = {
-            Text(if (isEditing) "Edit Custom Rate" else "Add Custom Rate", color = Color.White)
-        },
+        containerColor = colors.surface,
+        title = { Text(if (isEditing) "Edit Custom Rate" else "Add Custom Rate", color = colors.textPrimary) },
         text = {
             Column {
-                Text("From (base)", fontSize = 12.sp, color = Color(0xFF8E8E93))
+                Text("From (base)", fontSize = 12.sp, color = colors.textSecondary)
                 Spacer(Modifier.height(4.dp))
-                CurrencyDropdown(
-                    code = baseCode,
-                    availableCurrencies = availableCurrencies,
-                    onSelected = { baseCode = it }
-                )
+                CurrencyDropdown(code = baseCode, availableCurrencies = availableCurrencies, onSelected = { baseCode = it })
 
                 Spacer(Modifier.height(12.dp))
 
-                Text("To (converted)", fontSize = 12.sp, color = Color(0xFF8E8E93))
+                Text("To (converted)", fontSize = 12.sp, color = colors.textSecondary)
                 Spacer(Modifier.height(4.dp))
-                CurrencyDropdown(
-                    code = targetCode,
-                    availableCurrencies = availableCurrencies,
-                    enabled = !isEditing,
-                    onSelected = { targetCode = it }
-                )
+                CurrencyDropdown(code = targetCode, availableCurrencies = availableCurrencies, enabled = !isEditing, onSelected = { targetCode = it })
 
                 if (baseCode.isNotEmpty() && targetCode.isNotEmpty()) {
                     Spacer(Modifier.height(16.dp))
-                    Text("Rate", fontSize = 12.sp, color = Color(0xFF8E8E93))
+                    Text("Rate", fontSize = 12.sp, color = colors.textSecondary)
                     Spacer(Modifier.height(4.dp))
                     Row(verticalAlignment = Alignment.CenterVertically) {
-                        Text("1 $baseCode =", color = Color.White, fontSize = 14.sp)
+                        Text("1 $baseCode =", color = colors.textPrimary, fontSize = 14.sp)
                         Spacer(Modifier.width(8.dp))
                         OutlinedTextField(
                             value = rateInput,
@@ -261,40 +270,27 @@ private fun CustomRateDialog(
                             keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal),
                             singleLine = true,
                             colors = OutlinedTextFieldDefaults.colors(
-                                focusedTextColor = Color.White,
-                                unfocusedTextColor = Color.White
+                                focusedTextColor = colors.textPrimary,
+                                unfocusedTextColor = colors.textPrimary
                             )
                         )
                         Spacer(Modifier.width(8.dp))
-                        Text(targetCode, color = Color.White, fontSize = 14.sp)
+                        Text(targetCode, color = colors.textPrimary, fontSize = 14.sp)
                     }
                     if (livePairRate != null) {
                         Spacer(Modifier.height(4.dp))
-                        Text(
-                            "Live: 1 $baseCode = ${"%.4f".format(livePairRate)} $targetCode",
-                            fontSize = 11.sp,
-                            color = Color(0xFF636366)
-                        )
+                        Text("Live: 1 $baseCode = ${"%.4f".format(livePairRate)} $targetCode", fontSize = 11.sp, color = colors.textMuted)
                     }
                 }
             }
         },
         confirmButton = {
             TextButton(
-                onClick = {
-                    val r = rateInput.toDoubleOrNull()
-                    if (r != null && r > 0) onSave(baseCode, targetCode, r)
-                },
+                onClick = { val r = rateInput.toDoubleOrNull(); if (r != null && r > 0) onSave(baseCode, targetCode, r) },
                 enabled = saveEnabled
-            ) {
-                Text("Save", color = Color(0xFF0A84FF))
-            }
+            ) { Text("Save", color = colors.fromAmountColor) }
         },
-        dismissButton = {
-            TextButton(onClick = onDismiss) {
-                Text("Cancel", color = Color(0xFF8E8E93))
-            }
-        }
+        dismissButton = { TextButton(onClick = onDismiss) { Text("Cancel", color = colors.textSecondary) } }
     )
 }
 
@@ -305,6 +301,7 @@ private fun CurrencyDropdown(
     enabled: Boolean = true,
     onSelected: (String) -> Unit
 ) {
+    val colors = LocalAppColors.current
     var expanded by remember { mutableStateOf(false) }
     var search by remember { mutableStateOf("") }
 
@@ -313,20 +310,13 @@ private fun CurrencyDropdown(
             onClick = { if (enabled) { expanded = true; search = "" } },
             modifier = Modifier.fillMaxWidth(),
             shape = RoundedCornerShape(8.dp),
-            colors = ButtonDefaults.outlinedButtonColors(contentColor = Color.White),
-            border = BorderStroke(1.dp, if (enabled) Color(0xFF48484A) else Color(0xFF38383A)),
+            colors = ButtonDefaults.outlinedButtonColors(contentColor = colors.textPrimary),
+            border = BorderStroke(1.dp, if (enabled) colors.inputBorder else colors.textMuted),
             enabled = enabled
         ) {
-            Text(
-                if (code.isEmpty()) "Select currency…" else "${currencyFlag(code)} $code",
-                fontSize = 14.sp
-            )
+            Text(if (code.isEmpty()) "Select currency…" else "${currencyFlag(code)} $code", fontSize = 14.sp)
         }
-        DropdownMenu(
-            expanded = expanded,
-            onDismissRequest = { expanded = false },
-            modifier = Modifier.heightIn(max = 280.dp)
-        ) {
+        DropdownMenu(expanded = expanded, onDismissRequest = { expanded = false }, modifier = Modifier.heightIn(max = 280.dp)) {
             OutlinedTextField(
                 value = search,
                 onValueChange = { search = it },
@@ -334,27 +324,25 @@ private fun CurrencyDropdown(
                 modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp).fillMaxWidth(),
                 singleLine = true
             )
-            availableCurrencies
-                .filter { c ->
-                    val name = try { JavaCurrency.getInstance(c).displayName } catch (e: Exception) { "" }
-                    search.isEmpty() || c.contains(search, true) || name.contains(search, true)
-                }
-                .forEach { c ->
-                    val name = try { JavaCurrency.getInstance(c).displayName } catch (e: Exception) { c }
-                    DropdownMenuItem(
-                        text = {
-                            Row(verticalAlignment = Alignment.CenterVertically) {
-                                Text(currencyFlag(c), fontSize = 18.sp)
-                                Spacer(Modifier.width(8.dp))
-                                Column {
-                                    Text(c, fontSize = 13.sp, fontWeight = FontWeight.Medium)
-                                    Text(name, fontSize = 11.sp, color = Color(0xFF8E8E93))
-                                }
+            availableCurrencies.filter { c ->
+                val name = try { JavaCurrency.getInstance(c).displayName } catch (e: Exception) { "" }
+                search.isEmpty() || c.contains(search, true) || name.contains(search, true)
+            }.forEach { c ->
+                val name = try { JavaCurrency.getInstance(c).displayName } catch (e: Exception) { c }
+                DropdownMenuItem(
+                    text = {
+                        Row(verticalAlignment = Alignment.CenterVertically) {
+                            Text(currencyFlag(c), fontSize = 18.sp)
+                            Spacer(Modifier.width(8.dp))
+                            Column {
+                                Text(c, fontSize = 13.sp, fontWeight = FontWeight.Medium)
+                                Text(name, fontSize = 11.sp, color = colors.textSecondary)
                             }
-                        },
-                        onClick = { onSelected(c); expanded = false; search = "" }
-                    )
-                }
+                        }
+                    },
+                    onClick = { onSelected(c); expanded = false; search = "" }
+                )
+            }
         }
     }
 }

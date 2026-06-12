@@ -28,6 +28,8 @@ fun HistoryScreen(
 ) {
     val state by vm.uiState.collectAsStateWithLifecycle()
 
+    val colors = LocalAppColors.current
+
     Column(modifier = modifier.fillMaxSize()) {
         if (state.history.isEmpty()) {
             Box(
@@ -36,7 +38,7 @@ fun HistoryScreen(
             ) {
                 Text(
                     text = "No calculations yet.\nPress = to record an entry.",
-                    color = Color(0xFF636366),
+                    color = colors.textMuted,
                     fontSize = 15.sp,
                     lineHeight = 22.sp,
                     textAlign = TextAlign.Center
@@ -52,7 +54,7 @@ fun HistoryScreen(
             ) {
                 Text(
                     text = "${state.history.size} entr${if (state.history.size == 1) "y" else "ies"}",
-                    color = Color(0xFF8E8E93),
+                    color = colors.textSecondary,
                     fontSize = 13.sp
                 )
                 TextButton(onClick = { vm.onAction(CalculatorAction.ClearHistory) }) {
@@ -60,10 +62,10 @@ fun HistoryScreen(
                         Icons.Default.Delete,
                         contentDescription = null,
                         modifier = Modifier.size(16.dp),
-                        tint = Color(0xFFFF453A)
+                        tint = colors.errorColor
                     )
                     Spacer(Modifier.width(4.dp))
-                    Text("Clear all", color = Color(0xFFFF453A), fontSize = 13.sp)
+                    Text("Clear all", color = colors.errorColor, fontSize = 13.sp)
                 }
             }
 
@@ -89,26 +91,18 @@ fun HistoryScreen(
 
 @Composable
 private fun HistoryEntryCard(entry: HistoryEntry, onClick: () -> Unit) {
+    val colors = LocalAppColors.current
     Card(
         modifier = Modifier
             .fillMaxWidth()
             .clickable(onClick = onClick),
-        colors = CardDefaults.cardColors(containerColor = Color(0xFF2C2C2E))
+        colors = CardDefaults.cardColors(containerColor = colors.surface)
     ) {
         Column(modifier = Modifier.padding(horizontal = 16.dp, vertical = 12.dp)) {
             if (entry.expression.isNotEmpty()) {
-                Text(
-                    text = entry.expression,
-                    color = Color(0xFF8E8E93),
-                    fontSize = 13.sp
-                )
+                Text(text = entry.expression, color = colors.textSecondary, fontSize = 13.sp)
             }
-            Text(
-                text = entry.display,
-                color = Color.White,
-                fontSize = 28.sp,
-                fontWeight = FontWeight.Light
-            )
+            Text(text = entry.display, color = colors.textPrimary, fontSize = 28.sp, fontWeight = FontWeight.Light)
             Spacer(Modifier.height(4.dp))
             Row(
                 modifier = Modifier.fillMaxWidth(),
@@ -117,15 +111,11 @@ private fun HistoryEntryCard(entry: HistoryEntry, onClick: () -> Unit) {
             ) {
                 Text(
                     text = "${currencyFlag(entry.fromCurrency)} ${entry.fromAmount}  →  ${currencyFlag(entry.toCurrency)} ${entry.toAmount}",
-                    color = Color(0xFF8E8E93),
+                    color = colors.textSecondary,
                     fontSize = 13.sp,
                     modifier = Modifier.weight(1f)
                 )
-                Text(
-                    text = formatHistoryTimestamp(entry.timestamp),
-                    color = Color(0xFF48484A),
-                    fontSize = 11.sp
-                )
+                Text(text = formatHistoryTimestamp(entry.timestamp), color = colors.textMuted, fontSize = 11.sp)
             }
         }
     }
