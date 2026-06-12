@@ -13,11 +13,13 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Close
+import androidx.compose.material.icons.filled.History
 import androidx.compose.material.icons.filled.Info
 import androidx.compose.material.icons.filled.Menu
 import androidx.compose.material.icons.filled.Refresh
 import androidx.compose.material.icons.filled.Settings
 import androidx.compose.material.icons.filled.SwapHoriz
+import androidx.compose.material.icons.filled.WifiOff
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
@@ -63,7 +65,7 @@ fun currencyFlag(code: String): String {
 
 // ── Root composable ──────────────────────────────────────────────────────────
 
-private enum class Screen { Calculator, Settings, About }
+private enum class Screen { Calculator, History, Settings, About }
 
 @Composable
 fun AppScreen() {
@@ -115,6 +117,11 @@ fun AppScreen() {
                         onDismissRequest = { menuExpanded = false }
                     ) {
                         DropdownMenuItem(
+                            text = { Text("History") },
+                            leadingIcon = { Icon(Icons.Default.History, null) },
+                            onClick = { screen = Screen.History; menuExpanded = false }
+                        )
+                        DropdownMenuItem(
                             text = { Text("Settings") },
                             leadingIcon = { Icon(Icons.Default.Settings, null) },
                             onClick = { screen = Screen.Settings; menuExpanded = false }
@@ -137,6 +144,7 @@ fun AppScreen() {
 
         when (screen) {
             Screen.Calculator -> CalculatorScreen(vm = vm, modifier = Modifier.weight(1f))
+            Screen.History -> HistoryScreen(vm = vm, modifier = Modifier.weight(1f), onEntryRestored = { screen = Screen.Calculator })
             Screen.About -> AboutScreen(modifier = Modifier.weight(1f))
             Screen.Settings -> SettingsScreen(vm = vm, modifier = Modifier.weight(1f))
         }
@@ -355,11 +363,22 @@ fun CalculatorScreen(vm: CalculatorViewModel = viewModel(), modifier: Modifier =
                         fontSize = 11.sp
                     )
                 }
-                Text(
-                    text = state.lastUpdated,
-                    color = Color(0xFF8E8E93),
-                    fontSize = 11.sp
-                )
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    if (state.isOffline) {
+                        Icon(
+                            imageVector = Icons.Default.WifiOff,
+                            contentDescription = "Offline",
+                            tint = Color(0xFFFF9F0A),
+                            modifier = Modifier.size(11.dp)
+                        )
+                        Spacer(Modifier.width(3.dp))
+                    }
+                    Text(
+                        text = state.lastUpdated,
+                        color = if (state.isOffline) Color(0xFFFF9F0A) else Color(0xFF8E8E93),
+                        fontSize = 11.sp
+                    )
+                }
             }
             IconButton(
                 onClick = {

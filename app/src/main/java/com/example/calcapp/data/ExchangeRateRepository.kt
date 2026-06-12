@@ -9,6 +9,7 @@ import androidx.datastore.preferences.core.longPreferencesKey
 import androidx.datastore.preferences.core.stringPreferencesKey
 import androidx.datastore.preferences.preferencesDataStore
 import com.example.calcapp.ui.CustomRateEntry
+import com.example.calcapp.ui.HistoryEntry
 import com.google.gson.Gson
 import com.google.gson.reflect.TypeToken
 import kotlinx.coroutines.flow.first
@@ -32,6 +33,7 @@ class ExchangeRateRepository(private val context: Context) {
     private val gson = Gson()
     private val rateMapType = object : TypeToken<Map<String, Double>>() {}.type
     private val customRateMapType = object : TypeToken<Map<String, CustomRateEntry>>() {}.type
+    private val historyListType = object : TypeToken<List<HistoryEntry>>() {}.type
 
     suspend fun getRates(baseCurrency: String = "USD", forceRefresh: Boolean = false): Map<String, Double> {
         val prefs = context.dataStore.data.first()
@@ -107,4 +109,15 @@ class ExchangeRateRepository(private val context: Context) {
 
     suspend fun loadHapticEnabled(): Boolean =
         context.dataStore.data.first()[hapticEnabledKey] ?: true
+
+    private val historyKey = stringPreferencesKey("history")
+
+    suspend fun saveHistory(history: List<HistoryEntry>) {
+        context.dataStore.edit { it[historyKey] = gson.toJson(history) }
+    }
+
+    suspend fun loadHistory(): List<HistoryEntry> {
+        val json = context.dataStore.data.first()[historyKey] ?: return emptyList()
+        return try { gson.fromJson(json, historyListType) } catch (e: Exception) { emptyList() }
+    }
 }

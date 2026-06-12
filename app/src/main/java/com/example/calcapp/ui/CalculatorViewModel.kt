@@ -15,6 +15,16 @@ import kotlin.math.floor
 
 data class CustomRateEntry(val base: String, val rate: Double)
 
+data class HistoryEntry(
+    val display: String,
+    val expression: String,
+    val fromAmount: String,
+    val toAmount: String,
+    val fromCurrency: String,
+    val toCurrency: String,
+    val timestamp: Long
+)
+
 data class CalculatorUiState(
     val display: String = "0",
     val expression: String = "",
@@ -31,7 +41,9 @@ data class CalculatorUiState(
     val liveRates: Map<String, Double> = emptyMap(),
     val customRatePctDiff: Double? = null,
     val hapticEnabled: Boolean = true,
-    val isError: Boolean = false
+    val isError: Boolean = false,
+    val history: List<HistoryEntry> = emptyList(),
+    val isOffline: Boolean = false
 )
 
 sealed class CalculatorAction {
@@ -53,6 +65,8 @@ sealed class CalculatorAction {
     data class ClearCustomRate(val code: String) : CalculatorAction()
     data class SetHaptic(val enabled: Boolean) : CalculatorAction()
     data class PasteValue(val text: String) : CalculatorAction()
+    data class RestoreHistory(val entry: HistoryEntry) : CalculatorAction()
+    object ClearHistory : CalculatorAction()
 }
 
 private data class BracketState(val firstOperand: Double?, val pendingOp: Char?)
@@ -83,7 +97,8 @@ class CalculatorViewModel(application: Application) : AndroidViewModel(applicati
             val recents = repository.loadRecentCurrencies()
             val customRates = repository.loadCustomRates()
             val hapticEnabled = repository.loadHapticEnabled()
-            _uiState.update { it.copy(toCurrency = to, fromCurrency = from, recentCurrencies = recents, customRates = customRates, hapticEnabled = hapticEnabled) }
+            val history = repository.loadHistory()
+            _uiState.update { it.copy(toCurrency = to, fromCurrency = from, recentCurrencies = recents, customRates = customRates, hapticEnabled = hapticEnabled, history = history) }
             fetchRates(forceRefresh = false)
         }
     }
@@ -108,11 +123,12 @@ class CalculatorViewModel(application: Application) : AndroidViewModel(applicati
                         isRefreshing = false,
                         lastUpdated = "Updated $updated",
                         availableCurrencies = rates.keys.sorted(),
-                        liveRates = rates
+                        liveRates = rates,
+                        isOffline = false
                     )
                 }
             } catch (e: Exception) {
-                _uiState.update { it.copy(isRefreshing = false, lastUpdated = "Offline") }
+                _uiState.update { it.copy(isRefreshing = false, lastUpdated = "Offline", isOffline = true) }
             }
             updateCurrencyDisplay()
         }
@@ -124,7 +140,12 @@ class CalculatorViewModel(application: Application) : AndroidViewModel(applicati
             is CalculatorAction.Decimal -> handleDecimal()
             is CalculatorAction.Clear -> handleClear()
             is CalculatorAction.Delete -> handleDelete()
-            is CalculatorAction.Calculate -> handleCalculate()
+            is CalculatorAction.Calculate -> {
+                handleCalculate()
+                updateDisplay()
+                if (!_uiState.value.isError && _uiState.value.display != "0") recordHistory()
+                return
+            }
             is CalculatorAction.Percent -> handlePercent()
             is CalculatorAction.SmartBracket -> {
                 val atStart = firstOperand == null && pendingOp == null
@@ -182,6 +203,19 @@ class CalculatorViewModel(application: Application) : AndroidViewModel(applicati
                     _uiState.update { it.copy(isError = false) }
                     updateDisplay()
                 }
+                return
+            }
+            is CalculatorAction.RestoreHistory -> {
+                currentInput = action.entry.display
+                firstOperand = null; pendingOp = null
+                bracketStack.clear(); expressionDisplay.clear()
+                justCalculated = true; shouldResetInput = false
+                _uiState.update { it.copy(isError = false) }
+                updateDisplay(); return
+            }
+            is CalculatorAction.ClearHistory -> {
+                _uiState.update { it.copy(history = emptyList()) }
+                viewModelScope.launch { repository.saveHistory(emptyList()) }
                 return
             }
         }
@@ -353,6 +387,22 @@ class CalculatorViewModel(application: Application) : AndroidViewModel(applicati
         firstOperand = null; pendingOp = null
         bracketStack.clear(); expressionDisplay.clear()
         justCalculated = true
+    }
+
+    private fun recordHistory() {
+        val state = _uiState.value
+        val entry = HistoryEntry(
+            display = state.display,
+            expression = state.expression,
+            fromAmount = state.fromAmount,
+            toAmount = state.toAmount,
+            fromCurrency = state.fromCurrency,
+            toCurrency = state.toCurrency,
+            timestamp = System.currentTimeMillis()
+        )
+        val updated = (listOf(entry) + state.history).take(50)
+        _uiState.update { it.copy(history = updated) }
+        viewModelScope.launch { repository.saveHistory(updated) }
     }
 
     private fun applyOp(a: Double, b: Double, op: Char): Double? = when (op) {
