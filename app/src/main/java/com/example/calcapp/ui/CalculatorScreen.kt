@@ -38,6 +38,18 @@ private val ButtonDark = Color(0xFF333333)
 private val ButtonLight = Color(0xFFA5A5A5)
 private val ButtonOrange = Color(0xFFFF9F0A)
 
+private fun currencyFlag(code: String): String {
+    val countryCode = when (code) {
+        "EUR" -> "EU"
+        else -> code.take(2)
+    }
+    return try {
+        countryCode.uppercase().map { char ->
+            String(Character.toChars(char.code - 'A'.code + 0x1F1E6))
+        }.joinToString("")
+    } catch (e: Exception) { "" }
+}
+
 // ── Root composable ──────────────────────────────────────────────────────────
 
 @Composable
@@ -201,6 +213,7 @@ fun CalculatorScreen(vm: CalculatorViewModel = viewModel(), modifier: Modifier =
                 label = "From",
                 selected = state.fromCurrency,
                 available = state.availableCurrencies,
+                recentCurrencies = state.recentCurrencies,
                 onSelected = { vm.onAction(CalculatorAction.SetFromCurrency(it)) },
                 modifier = Modifier.weight(1f)
             )
@@ -215,6 +228,7 @@ fun CalculatorScreen(vm: CalculatorViewModel = viewModel(), modifier: Modifier =
                 label = "To",
                 selected = state.toCurrency,
                 available = state.availableCurrencies,
+                recentCurrencies = state.recentCurrencies,
                 onSelected = { vm.onAction(CalculatorAction.SetToCurrency(it)) },
                 modifier = Modifier.weight(1f)
             )
@@ -272,13 +286,13 @@ fun CalculatorScreen(vm: CalculatorViewModel = viewModel(), modifier: Modifier =
             horizontalAlignment = Alignment.End
         ) {
             Text(
-                text = state.fromAmount,
+                text = "${currencyFlag(state.fromCurrency)} ${state.fromAmount}",
                 color = Color(0xFF0A84FF),
                 fontSize = 20.sp,
                 fontWeight = FontWeight.Medium
             )
             Text(
-                text = state.toAmount,
+                text = "${currencyFlag(state.toCurrency)} ${state.toAmount}",
                 color = Color(0xFF34C759),
                 fontSize = 20.sp,
                 fontWeight = FontWeight.Medium
@@ -349,11 +363,18 @@ fun CurrencySelector(
     label: String,
     selected: String,
     available: List<String>,
+    recentCurrencies: List<String>,
     onSelected: (String) -> Unit,
     modifier: Modifier = Modifier
 ) {
     var expanded by remember { mutableStateOf(false) }
     var search by remember { mutableStateOf("") }
+
+    fun matches(code: String): Boolean {
+        if (search.isEmpty()) return true
+        val name = try { JavaCurrency.getInstance(code).displayName } catch (e: Exception) { "" }
+        return code.contains(search, ignoreCase = true) || name.contains(search, ignoreCase = true)
+    }
 
     Box(modifier = modifier) {
         OutlinedButton(
@@ -364,12 +385,12 @@ fun CurrencySelector(
             border = androidx.compose.foundation.BorderStroke(1.dp, Color(0xFF48484A)),
             contentPadding = PaddingValues(horizontal = 8.dp, vertical = 4.dp)
         ) {
-            Text("$label: $selected", fontSize = 13.sp, maxLines = 1)
+            Text("$label: ${currencyFlag(selected)} $selected", fontSize = 13.sp, maxLines = 1)
         }
         DropdownMenu(
             expanded = expanded,
             onDismissRequest = { expanded = false },
-            modifier = Modifier.heightIn(max = 320.dp)
+            modifier = Modifier.heightIn(max = 360.dp)
         ) {
             OutlinedTextField(
                 value = search,
@@ -380,25 +401,55 @@ fun CurrencySelector(
                     .fillMaxWidth(),
                 singleLine = true
             )
-            val filtered = available.filter { code ->
-                val name = try { JavaCurrency.getInstance(code).displayName } catch (e: Exception) { "" }
-                code.contains(search, ignoreCase = true) || name.contains(search, ignoreCase = true)
-            }
-            filtered.forEach { code ->
-                val name = try { JavaCurrency.getInstance(code).displayName } catch (e: Exception) { code }
-                DropdownMenuItem(
-                    text = {
-                        Column {
-                            Text(code, fontSize = 14.sp, fontWeight = FontWeight.Medium)
-                            Text(name, fontSize = 11.sp, color = Color(0xFF8E8E93))
-                        }
-                    },
-                    onClick = {
-                        onSelected(code)
-                        expanded = false
-                    }
+
+            // Recent currencies section
+            val filteredRecents = recentCurrencies.filter { matches(it) }
+            if (filteredRecents.isNotEmpty()) {
+                Text(
+                    text = "RECENT",
+                    fontSize = 10.sp,
+                    color = Color(0xFF8E8E93),
+                    modifier = Modifier.padding(horizontal = 16.dp, vertical = 4.dp)
                 )
+                filteredRecents.forEach { code ->
+                    val name = try { JavaCurrency.getInstance(code).displayName } catch (e: Exception) { code }
+                    DropdownMenuItem(
+                        text = {
+                            Row(verticalAlignment = Alignment.CenterVertically) {
+                                Text(currencyFlag(code), fontSize = 22.sp)
+                                Spacer(Modifier.width(10.dp))
+                                Column {
+                                    Text(code, fontSize = 14.sp, fontWeight = FontWeight.Medium)
+                                    Text(name, fontSize = 11.sp, color = Color(0xFF8E8E93))
+                                }
+                            }
+                        },
+                        onClick = { onSelected(code); expanded = false }
+                    )
+                }
+                HorizontalDivider(modifier = Modifier.padding(vertical = 4.dp))
             }
+
+            // Full sorted list (excluding recents to avoid duplication)
+            val recentSet = recentCurrencies.toSet()
+            available
+                .filter { it !in recentSet && matches(it) }
+                .forEach { code ->
+                    val name = try { JavaCurrency.getInstance(code).displayName } catch (e: Exception) { code }
+                    DropdownMenuItem(
+                        text = {
+                            Row(verticalAlignment = Alignment.CenterVertically) {
+                                Text(currencyFlag(code), fontSize = 22.sp)
+                                Spacer(Modifier.width(10.dp))
+                                Column {
+                                    Text(code, fontSize = 14.sp, fontWeight = FontWeight.Medium)
+                                    Text(name, fontSize = 11.sp, color = Color(0xFF8E8E93))
+                                }
+                            }
+                        },
+                        onClick = { onSelected(code); expanded = false }
+                    )
+                }
         }
     }
 }

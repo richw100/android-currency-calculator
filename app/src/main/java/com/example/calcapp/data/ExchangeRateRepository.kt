@@ -21,6 +21,7 @@ private val TIMESTAMP_KEY = longPreferencesKey("rates_timestamp")
 private val BASE_KEY = stringPreferencesKey("base_currency")
 private val HOME_CURRENCY_KEY = stringPreferencesKey("home_currency")
 private val LOCAL_CURRENCY_KEY = stringPreferencesKey("local_currency")
+private val RECENT_CURRENCIES_KEY = stringPreferencesKey("recent_currencies")
 
 private const val CACHE_TTL_MS = 24 * 60 * 60 * 1000L
 
@@ -73,5 +74,14 @@ class ExchangeRateRepository(private val context: Context) {
             prefs[HOME_CURRENCY_KEY] ?: "EUR",
             prefs[LOCAL_CURRENCY_KEY] ?: "GBP"
         )
+    }
+
+    suspend fun saveRecentCurrencies(currencies: List<String>) {
+        context.dataStore.edit { it[RECENT_CURRENCIES_KEY] = currencies.joinToString(",") }
+    }
+
+    suspend fun loadRecentCurrencies(): List<String> {
+        val raw = context.dataStore.data.first()[RECENT_CURRENCIES_KEY] ?: return emptyList()
+        return raw.split(",").filter { it.isNotBlank() }
     }
 }

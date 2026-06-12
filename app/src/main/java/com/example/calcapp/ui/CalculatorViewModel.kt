@@ -24,6 +24,7 @@ data class CalculatorUiState(
     val lastUpdated: String = "",
     val isRefreshing: Boolean = false,
     val availableCurrencies: List<String> = emptyList(),
+    val recentCurrencies: List<String> = emptyList(),
     val isError: Boolean = false
 )
 
@@ -69,9 +70,19 @@ class CalculatorViewModel(application: Application) : AndroidViewModel(applicati
     init {
         viewModelScope.launch {
             val (to, from) = repository.loadCurrencyPrefs()
-            _uiState.update { it.copy(toCurrency = to, fromCurrency = from) }
+            val recents = repository.loadRecentCurrencies()
+            _uiState.update { it.copy(toCurrency = to, fromCurrency = from, recentCurrencies = recents) }
             fetchRates(forceRefresh = false)
         }
+    }
+
+    private fun updateRecents(code: String) {
+        val updated = (_uiState.value.recentCurrencies.toMutableList()
+            .also { it.remove(code) }
+            .also { it.add(0, code) })
+            .take(5)
+        _uiState.update { it.copy(recentCurrencies = updated) }
+        viewModelScope.launch { repository.saveRecentCurrencies(updated) }
     }
 
     private fun fetchRates(forceRefresh: Boolean) {
@@ -120,11 +131,13 @@ class CalculatorViewModel(application: Application) : AndroidViewModel(applicati
             }
             is CalculatorAction.SetToCurrency -> {
                 _uiState.update { it.copy(toCurrency = action.code) }
+                updateRecents(action.code)
                 viewModelScope.launch { repository.saveCurrencyPrefs(action.code, _uiState.value.fromCurrency) }
                 updateCurrencyDisplay(); return
             }
             is CalculatorAction.SetFromCurrency -> {
                 _uiState.update { it.copy(fromCurrency = action.code) }
+                updateRecents(action.code)
                 viewModelScope.launch { repository.saveCurrencyPrefs(_uiState.value.toCurrency, action.code) }
                 updateCurrencyDisplay(); return
             }
