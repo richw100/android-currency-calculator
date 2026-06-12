@@ -1,6 +1,9 @@
 package com.example.calcapp.ui
 
+import android.content.Intent
+import android.net.Uri
 import androidx.compose.foundation.background
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
@@ -17,6 +20,7 @@ import java.util.Currency as JavaCurrency
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
@@ -30,6 +34,7 @@ private val ButtonOrange = Color(0xFFFF9F0A)
 @Composable
 fun CalculatorScreen(vm: CalculatorViewModel = viewModel()) {
     val state by vm.uiState.collectAsStateWithLifecycle()
+    val context = LocalContext.current
 
     Column(
         modifier = Modifier
@@ -163,6 +168,21 @@ fun CalculatorScreen(vm: CalculatorViewModel = viewModel()) {
         ButtonGrid(
             onAction = vm::onAction,
             modifier = Modifier.padding(horizontal = 8.dp, vertical = 8.dp)
+        )
+
+        Text(
+            text = "Like using this ad-free app? Buy me a coffee to say thanks!",
+            color = Color(0xFF636366),
+            fontSize = 11.sp,
+            textAlign = TextAlign.Center,
+            modifier = Modifier
+                .fillMaxWidth()
+                .clickable {
+                    context.startActivity(
+                        Intent(Intent.ACTION_VIEW, Uri.parse("https://buymeacoffee.com/rww_100"))
+                    )
+                }
+                .padding(horizontal = 16.dp, vertical = 8.dp)
         )
     }
 }
