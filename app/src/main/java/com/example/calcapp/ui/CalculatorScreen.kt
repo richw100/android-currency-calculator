@@ -2,8 +2,10 @@ package com.example.calcapp.ui
 
 import android.content.Intent
 import android.net.Uri
+import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.combinedClickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
@@ -24,8 +26,12 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.rotate
 import androidx.compose.ui.graphics.Color
 import java.util.Currency as JavaCurrency
+import androidx.compose.ui.hapticfeedback.HapticFeedbackType
+import androidx.compose.ui.platform.LocalClipboardManager
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.LocalHapticFeedback
 import androidx.compose.ui.res.painterResource
+import androidx.compose.ui.text.AnnotatedString
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
@@ -379,23 +385,22 @@ fun CalculatorScreen(vm: CalculatorViewModel = viewModel(), modifier: Modifier =
         Spacer(modifier = Modifier.weight(1f))
 
         // Currency conversion display
+        val shareText = "${currencyFlag(state.fromCurrency)} ${state.fromAmount} = ${currencyFlag(state.toCurrency)} ${state.toAmount}"
         Column(
             modifier = Modifier
                 .fillMaxWidth()
                 .padding(horizontal = 20.dp, vertical = 4.dp),
             horizontalAlignment = Alignment.End
         ) {
-            Text(
+            CopyableAmount(
                 text = "${currencyFlag(state.fromCurrency)} ${state.fromAmount}",
                 color = Color(0xFF0A84FF),
-                fontSize = 20.sp,
-                fontWeight = FontWeight.Medium
+                shareText = shareText
             )
-            Text(
+            CopyableAmount(
                 text = "${currencyFlag(state.toCurrency)} ${state.toAmount}",
                 color = Color(0xFF34C759),
-                fontSize = 20.sp,
-                fontWeight = FontWeight.Medium
+                shareText = shareText
             )
         }
 
@@ -561,6 +566,53 @@ fun CurrencySelector(
                         onClick = { onSelected(code); expanded = false }
                     )
                 }
+        }
+    }
+}
+
+// ── Copyable amount ───────────────────────────────────────────────────────────
+
+@OptIn(ExperimentalFoundationApi::class)
+@Composable
+private fun CopyableAmount(text: String, color: Color, shareText: String) {
+    val context = LocalContext.current
+    val clipboard = LocalClipboardManager.current
+    var menuExpanded by remember { mutableStateOf(false) }
+
+    Box {
+        Text(
+            text = text,
+            color = color,
+            fontSize = 20.sp,
+            fontWeight = FontWeight.Medium,
+            modifier = Modifier.combinedClickable(
+                onClick = {},
+                onLongClick = { menuExpanded = true }
+            )
+        )
+        DropdownMenu(expanded = menuExpanded, onDismissRequest = { menuExpanded = false }) {
+            DropdownMenuItem(
+                text = { Text("Copy") },
+                onClick = {
+                    clipboard.setText(AnnotatedString(text))
+                    menuExpanded = false
+                }
+            )
+            DropdownMenuItem(
+                text = { Text("Share") },
+                onClick = {
+                    context.startActivity(
+                        Intent.createChooser(
+                            Intent(Intent.ACTION_SEND).apply {
+                                type = "text/plain"
+                                putExtra(Intent.EXTRA_TEXT, shareText)
+                            },
+                            null
+                        )
+                    )
+                    menuExpanded = false
+                }
+            )
         }
     }
 }
@@ -762,8 +814,12 @@ fun CalcButton(
     onClick: () -> Unit,
     modifier: Modifier = Modifier
 ) {
+    val haptic = LocalHapticFeedback.current
     Button(
-        onClick = onClick,
+        onClick = {
+            haptic.performHapticFeedback(HapticFeedbackType.LongPress)
+            onClick()
+        },
         modifier = modifier.height(72.dp),
         shape = CircleShape,
         colors = ButtonDefaults.buttonColors(containerColor = bg, contentColor = fg),
