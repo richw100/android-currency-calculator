@@ -1,0 +1,77 @@
+package com.example.calcapp.data
+
+import android.content.Context
+import androidx.datastore.core.DataStore
+import androidx.datastore.preferences.core.Preferences
+import androidx.datastore.preferences.core.edit
+import androidx.datastore.preferences.core.longPreferencesKey
+import androidx.datastore.preferences.core.stringPreferencesKey
+import androidx.datastore.preferences.preferencesDataStore
+import com.google.gson.Gson
+import com.google.gson.reflect.TypeToken
+import kotlinx.coroutines.flow.first
+import java.text.SimpleDateFormat
+import java.util.Date
+import java.util.Locale
+
+private val Context.dataStore: DataStore<Preferences> by preferencesDataStore(name = "exchange_rates")
+
+private val RATES_KEY = stringPreferencesKey("rates_json")
+private val TIMESTAMP_KEY = longPreferencesKey("rates_timestamp")
+private val BASE_KEY = stringPreferencesKey("base_currency")
+private val HOME_CURRENCY_KEY = stringPreferencesKey("home_currency")
+private val LOCAL_CURRENCY_KEY = stringPreferencesKey("local_currency")
+
+private const val CACHE_TTL_MS = 24 * 60 * 60 * 1000L
+
+class ExchangeRateRepository(private val context: Context) {
+    private val api = ExchangeRateApi.create()
+    private val gson = Gson()
+    private val rateMapType = object : TypeToken<Map<String, Double>>() {}.type
+
+    suspend fun getRates(baseCurrency: String = "USD", forceRefresh: Boolean = false): Map<String, Double> {
+        val prefs = context.dataStore.data.first()
+        val cachedJson = prefs[RATES_KEY]
+        val timestamp = prefs[TIMESTAMP_KEY] ?: 0L
+        val cachedBase = prefs[BASE_KEY]
+        val cacheValid = !forceRefresh
+            && cachedJson != null
+            && cachedBase == baseCurrency
+            && System.currentTimeMillis() - timestamp < CACHE_TTL_MS
+
+        if (cacheValid) return gson.fromJson(cachedJson, rateMapType)
+
+        return try {
+            val response = api.getRates(baseCurrency)
+            context.dataStore.edit {
+                it[RATES_KEY] = gson.toJson(response.rates)
+                it[TIMESTAMP_KEY] = System.currentTimeMillis()
+                it[BASE_KEY] = baseCurrency
+            }
+            response.rates
+        } catch (e: Exception) {
+            if (cachedJson != null) gson.fromJson(cachedJson, rateMapType)
+            else throw e
+        }
+    }
+
+    suspend fun getLastUpdated(): String {
+        val timestamp = context.dataStore.data.first()[TIMESTAMP_KEY] ?: return "Never"
+        return SimpleDateFormat("dd MMM HH:mm", Locale.getDefault()).format(Date(timestamp))
+    }
+
+    suspend fun saveCurrencyPrefs(home: String, local: String) {
+        context.dataStore.edit {
+            it[HOME_CURRENCY_KEY] = home
+            it[LOCAL_CURRENCY_KEY] = local
+        }
+    }
+
+    suspend fun loadCurrencyPrefs(): Pair<String, String> {
+        val prefs = context.dataStore.data.first()
+        return Pair(
+            prefs[HOME_CURRENCY_KEY] ?: "EUR",
+            prefs[LOCAL_CURRENCY_KEY] ?: "GBP"
+        )
+    }
+}

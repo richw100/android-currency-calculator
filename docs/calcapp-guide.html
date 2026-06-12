@@ -1,0 +1,747 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>CalcApp — Developer Guide</title>
+<style>
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body {
+    font-family: Georgia, 'Times New Roman', serif;
+    font-size: 14px;
+    line-height: 1.7;
+    color: #1a1a1a;
+    max-width: 860px;
+    margin: 0 auto;
+    padding: 40px 48px;
+  }
+  h1 { font-size: 28px; margin-bottom: 6px; color: #111; }
+  h2 { font-size: 20px; margin: 36px 0 10px; color: #111; border-bottom: 2px solid #e0e0e0; padding-bottom: 4px; }
+  h3 { font-size: 16px; margin: 24px 0 8px; color: #333; }
+  h4 { font-size: 14px; margin: 16px 0 6px; color: #555; font-style: italic; }
+  p { margin-bottom: 12px; }
+  ul, ol { margin: 8px 0 12px 24px; }
+  li { margin-bottom: 4px; }
+  code {
+    font-family: 'Courier New', Courier, monospace;
+    font-size: 12.5px;
+    background: #f4f4f4;
+    border: 1px solid #ddd;
+    border-radius: 3px;
+    padding: 1px 5px;
+  }
+  pre {
+    font-family: 'Courier New', Courier, monospace;
+    font-size: 12px;
+    background: #f8f8f8;
+    border: 1px solid #ddd;
+    border-left: 4px solid #ff9f0a;
+    border-radius: 3px;
+    padding: 14px 16px;
+    margin: 10px 0 16px;
+    overflow-x: auto;
+    line-height: 1.5;
+  }
+  pre code { background: none; border: none; padding: 0; font-size: 12px; }
+  .subtitle { color: #666; font-size: 15px; margin-bottom: 32px; }
+  .callout {
+    background: #fff8e6;
+    border: 1px solid #ffe0a0;
+    border-left: 4px solid #ff9f0a;
+    border-radius: 3px;
+    padding: 12px 16px;
+    margin: 14px 0;
+  }
+  .callout.info { background: #e8f4fd; border-color: #90caf9; border-left-color: #1976d2; }
+  .callout.analogy { background: #e8f5e9; border-color: #a5d6a7; border-left-color: #388e3c; }
+  table {
+    width: 100%;
+    border-collapse: collapse;
+    margin: 12px 0 18px;
+    font-size: 13px;
+  }
+  th { background: #f0f0f0; padding: 8px 12px; text-align: left; border: 1px solid #ccc; }
+  td { padding: 7px 12px; border: 1px solid #ddd; vertical-align: top; }
+  tr:nth-child(even) td { background: #fafafa; }
+  .file-header { font-family: 'Courier New', monospace; font-size: 13px; font-weight: bold; color: #333; background: #eee; padding: 4px 10px; border-radius: 3px; margin-bottom: 6px; display: inline-block; }
+  .toc { background: #f9f9f9; border: 1px solid #ddd; padding: 16px 24px; margin: 24px 0 32px; border-radius: 4px; }
+  .toc h3 { margin-top: 0; font-size: 15px; }
+  .toc ol { margin-left: 18px; }
+  .toc li { margin-bottom: 3px; }
+  .toc a { color: #1976d2; text-decoration: none; }
+  .toc a:hover { text-decoration: underline; }
+  @media print {
+    body { padding: 20px 28px; font-size: 13px; }
+    h2 { page-break-before: always; }
+    h2:first-of-type { page-break-before: avoid; }
+    pre { page-break-inside: avoid; }
+    .callout { page-break-inside: avoid; }
+  }
+</style>
+</head>
+<body>
+
+<h1>CalcApp — Developer Guide</h1>
+<p class="subtitle">A guide for developers with C/Python experience who are new to Android, Kotlin, and Gradle</p>
+
+<div class="toc">
+  <h3>Contents</h3>
+  <ol>
+    <li><a href="#overview">What We Built and Why</a></li>
+    <li><a href="#toolchain">The Toolchain Explained</a></li>
+    <li><a href="#project-structure">Project Structure</a></li>
+    <li><a href="#gradle">Gradle: The Build System</a></li>
+    <li><a href="#kotlin">Kotlin: The Language</a></li>
+    <li><a href="#compose">Jetpack Compose: The UI Framework</a></li>
+    <li><a href="#files">Every File Explained</a></li>
+    <li><a href="#data-flow">How the App Works End-to-End</a></li>
+    <li><a href="#building">Building and Installing Manually</a></li>
+    <li><a href="#extending">How to Extend the App</a></li>
+  </ol>
+</div>
+
+<!-- ============================================================ -->
+<h2 id="overview">1. What We Built and Why</h2>
+
+<p>CalcApp is an Android calculator that shows the result of every calculation in two currencies simultaneously — a "from" currency (whatever you're spending in) and a "to" currency (whatever you want to see the equivalent in). As you type, both values update in real time.</p>
+
+<p>The from/to framing is deliberately direction-neutral: it works equally well when you're travelling abroad (from GBP to local currency) or planning a holiday at home (from EUR prices to GBP cost).</p>
+
+<p>Key features:</p>
+<ul>
+  <li>Standard 4-function calculator (+, −, ×, ÷)</li>
+  <li>Bracket support — sub-expressions like <code>(10 + 5) × 3</code></li>
+  <li>Smart bracket button that opens or closes depending on context</li>
+  <li>Percentage button — converts the current number to a decimal fraction</li>
+  <li>Exchange rates fetched from a free public API (<code>open.er-api.com</code>)</li>
+  <li>Rates cached locally for 24 hours so the app works offline</li>
+  <li>Manual refresh button with a live spinner</li>
+  <li>Exchange rate label showing full currency names and the current cross-rate</li>
+  <li>Swap button to instantly reverse the from/to currencies</li>
+  <li>Currency selection remembered between app launches</li>
+</ul>
+
+<h3>Technology choices</h3>
+<table>
+  <tr><th>Choice</th><th>Alternative</th><th>Why we chose it</th></tr>
+  <tr><td>Native Android (Kotlin)</td><td>Flutter, React Native</td><td>Android-only app; no cross-platform overhead or extra SDK</td></tr>
+  <tr><td>Jetpack Compose</td><td>XML layouts</td><td>Modern reactive UI — describe what to show, not how to update it</td></tr>
+  <tr><td>Retrofit</td><td>Raw HttpURLConnection</td><td>Typed HTTP client; eliminates serialisation boilerplate</td></tr>
+  <tr><td>DataStore</td><td>SQLite / SharedPreferences</td><td>Simple key-value persistence; SharedPreferences is deprecated for new code</td></tr>
+  <tr><td>open.er-api.com</td><td>fixer.io, exchangerate-api.com</td><td>Free, no API key required, 161 currencies</td></tr>
+  <tr><td>java.util.Currency</td><td>Hardcoded name map</td><td>Built into the JVM; gives localised display names for every ISO 4217 code with no extra dependency</td></tr>
+</table>
+
+<!-- ============================================================ -->
+<h2 id="toolchain">2. The Toolchain Explained</h2>
+
+<p>Coming from C/Python/CMake, you'll recognise the roles even if the names are different:</p>
+
+<table>
+  <tr><th>What you know</th><th>Android equivalent</th><th>Role</th></tr>
+  <tr><td>gcc / clang</td><td>kotlinc</td><td>Compiles source to bytecode</td></tr>
+  <tr><td>CMake</td><td>Gradle</td><td>Build system — dependency management, compilation, packaging</td></tr>
+  <tr><td>ld / linker</td><td>D8 / R8</td><td>Packages bytecode into DEX format (Android's executable format)</td></tr>
+  <tr><td>.exe / ELF binary</td><td>.apk file</td><td>The deployable artifact — a ZIP containing DEX, resources, and a manifest</td></tr>
+  <tr><td>pip / requirements.txt</td><td>Maven (via Gradle)</td><td>Dependency resolution and download</td></tr>
+  <tr><td>gdb / pdb</td><td>Android Studio / adb logcat</td><td>Debugging</td></tr>
+  <tr><td>adb</td><td>adb (same!)</td><td>Device communication — install, shell, log</td></tr>
+</table>
+
+<h3>The Android SDK</h3>
+<p>The Android SDK (installed at <code>~/android</code>) contains:</p>
+<ul>
+  <li><strong>platform-tools</strong> — includes <code>adb</code></li>
+  <li><strong>build-tools</strong> — <code>aapt2</code> (resource compiler), <code>d8</code> (DEX compiler), <code>apksigner</code></li>
+  <li><strong>platforms/android-35</strong> — the Android 35 API stubs (like a header-only SDK)</li>
+</ul>
+
+<h3>What is an APK?</h3>
+<p>An APK is just a ZIP file. If you rename <code>app-debug.apk</code> to <code>app-debug.zip</code> and unzip it you'll find:</p>
+<ul>
+  <li><code>classes.dex</code> — compiled bytecode (like a .pyc, but for Android's runtime)</li>
+  <li><code>resources.arsc</code> — compiled resources (strings, layouts)</li>
+  <li><code>AndroidManifest.xml</code> — binary-encoded manifest</li>
+  <li><code>lib/</code> — native .so files if any</li>
+  <li><code>META-INF/</code> — signing certificates</li>
+</ul>
+
+<!-- ============================================================ -->
+<h2 id="project-structure">3. Project Structure</h2>
+
+<p>Android projects follow a rigid directory layout that Gradle expects:</p>
+
+<pre><code>calcApp/
+├── gradle/
+│   ├── libs.versions.toml        # Central version catalogue (like requirements.txt)
+│   └── wrapper/
+│       ├── gradle-wrapper.jar    # Bootstraps the right Gradle version
+│       └── gradle-wrapper.properties  # Which Gradle version to download
+├── gradlew                       # Shell script that runs Gradle (like a Makefile entry point)
+├── settings.gradle.kts           # Declares which sub-projects exist
+├── build.gradle.kts              # Root build config (plugins only)
+├── gradle.properties             # JVM and Android flags
+├── local.properties              # Machine-local SDK path (not committed to git)
+└── app/                          # The actual application module
+    ├── build.gradle.kts          # App-specific build config
+    ├── proguard-rules.pro        # Code shrinking rules (unused in debug builds)
+    └── src/
+        └── main/
+            ├── AndroidManifest.xml          # App metadata and permissions
+            ├── res/
+            │   └── values/
+            │       ├── strings.xml          # String resources
+            │       └── themes.xml           # Legacy theme (Compose mostly ignores this)
+            └── java/com/example/calcapp/
+                ├── MainActivity.kt          # Entry point
+                ├── ui/
+                │   ├── CalculatorScreen.kt  # All UI code
+                │   ├── CalculatorViewModel.kt  # State + logic
+                │   └── theme/Theme.kt       # Material3 colour theme
+                └── data/
+                    ├── ExchangeRateApi.kt         # HTTP API interface
+                    └── ExchangeRateRepository.kt  # Cache + persistence</code></pre>
+
+<div class="callout analogy">
+  <strong>CMake analogy:</strong> <code>settings.gradle.kts</code> is like your top-level <code>CMakeLists.txt</code> that calls <code>add_subdirectory(app)</code>. Each module (<code>app/</code>) has its own <code>build.gradle.kts</code>, like a subdirectory <code>CMakeLists.txt</code>.
+</div>
+
+<!-- ============================================================ -->
+<h2 id="gradle">4. Gradle: The Build System</h2>
+
+<p>Gradle is a JVM-based build system using a Kotlin DSL (domain-specific language). It replaces CMake and pip in one tool.</p>
+
+<h3>The Gradle wrapper</h3>
+<p>The <code>gradlew</code> script does not require Gradle to be installed globally. It reads <code>gradle-wrapper.properties</code> to find the required version, downloads it from Gradle's servers on first run, and caches it in <code>~/.gradle/wrapper/dists/</code>. This guarantees everyone builds with exactly the same Gradle version — equivalent to pinning a CMake version in CI.</p>
+
+<h3>Version catalogue: <code>gradle/libs.versions.toml</code></h3>
+<p>This file centralises all library versions in one place:</p>
+<pre><code>[versions]
+kotlin = "2.0.20"
+retrofit = "2.11.0"
+
+[libraries]
+retrofit = { group = "com.squareup.retrofit2", name = "retrofit", version.ref = "retrofit" }
+# material-icons-extended is needed for icons like SwapHoriz not in the core set
+androidx-compose-material-icons = { group = "androidx.compose.material", name = "material-icons-extended" }
+
+[plugins]
+kotlin-android = { id = "org.jetbrains.kotlin.android", version.ref = "kotlin" }</code></pre>
+
+<p>Dependencies are then referenced in <code>build.gradle.kts</code> as <code>libs.retrofit</code> rather than hard-coded strings. This is equivalent to defining version variables in a top-level CMakeLists and <code>find_package()</code> elsewhere.</p>
+
+<div class="callout info">
+  <strong>material-icons-core vs material-icons-extended:</strong> Compose ships two icon sets. The <code>core</code> set is small but only contains the most common icons. <code>SwapHoriz</code> (used for the currency swap button) is in <code>extended</code> only. Using the wrong set causes an "unresolved reference" compile error even though the icon name looks correct.
+</div>
+
+<h3>The app's <code>build.gradle.kts</code></h3>
+<p>The important sections:</p>
+
+<pre><code>android {
+    compileSdk = 35         // The API level you compile against (like -I/path/to/sdk/headers)
+    defaultConfig {
+        minSdk = 26         // Oldest Android version the app runs on (Android 8.0, ~95% of devices)
+        targetSdk = 35      // Tells Android which behaviour version you've tested against
+    }
+    buildFeatures {
+        compose = true      // Enable the Compose compiler plugin
+    }
+}</code></pre>
+
+<div class="callout info">
+  <strong>compileSdk vs minSdk:</strong> <code>compileSdk</code> is what you build against (the headers). <code>minSdk</code> is the minimum runtime version. If you call an API added in SDK 30 without a version check, the build will warn but the app will crash at runtime on SDK 26 devices.
+</div>
+
+<h3>How dependencies are resolved</h3>
+<p>Android libraries are published to <strong>Maven Central</strong> and <strong>Google's Maven repository</strong> — like PyPI but for JVM packages. Gradle downloads them to <code>~/.gradle/caches/</code> on first build. The format <code>group:name:version</code> maps to a URL path on the repository server.</p>
+
+<!-- ============================================================ -->
+<h2 id="kotlin">5. Kotlin: The Language</h2>
+
+<p>Kotlin compiles to JVM bytecode and runs on Android's runtime (ART). If you know Python well and have written C, Kotlin will feel familiar with a few new concepts.</p>
+
+<h3>Key syntax for reading the codebase</h3>
+
+<h4>Data classes (like C structs with free equality/copy)</h4>
+<pre><code>data class CalculatorUiState(
+    val display: String = "0",     // val = immutable (const), var = mutable
+    val isError: Boolean = false   // default values like Python keyword args
+)</code></pre>
+<p>The <code>data</code> keyword auto-generates <code>equals()</code>, <code>hashCode()</code>, <code>toString()</code>, and a <code>copy()</code> method.</p>
+
+<h4>Sealed classes (like a typed union / enum with data)</h4>
+<pre><code>sealed class CalculatorAction {
+    data class Digit(val value: Int) : CalculatorAction()
+    object Clear : CalculatorAction()   // object = singleton instance
+}</code></pre>
+<p>A sealed class has a fixed set of subtypes known at compile time. The compiler can then enforce exhaustive <code>when</code> matching — like a C <code>enum</code> in a <code>switch</code> but carrying data.</p>
+
+<h4>Coroutines (like async/await in Python)</h4>
+<pre><code>viewModelScope.launch {          // starts a coroutine (like asyncio.create_task)
+    val rates = repository.getRates()   // suspend fun — yields while waiting, like await
+    updateDisplay()
+}</code></pre>
+<p>Coroutines are Kotlin's concurrency primitive. <code>suspend fun</code> is like Python's <code>async def</code>. They run on a thread pool managed by the coroutine dispatcher.</p>
+
+<h4>Extension functions</h4>
+<pre><code>// Adds a .dataStore property to any Context object
+private val Context.dataStore: DataStore&lt;Preferences&gt;
+    by preferencesDataStore(name = "exchange_rates")</code></pre>
+<p>Extension functions add methods to existing classes without subclassing. The <code>by</code> keyword here is Kotlin's property delegation.</p>
+
+<h4>Lambda syntax</h4>
+<pre><code>rates.keys.filter { it.contains(search, ignoreCase = true) }
+//                 ^^^  'it' is the implicit single parameter, like Python's lambda x: ...</code></pre>
+
+<h4>Null safety</h4>
+<pre><code>val rate: Double? = rates["GBP"]   // ? means nullable (can be null)
+val rate: Double  = rates["GBP"]!! // !! asserts non-null (throws if null — avoid in prod)
+rate?.let { doSomething(it) }      // safe call — only runs if rate != null</code></pre>
+<p>The compiler enforces null safety at compile time. This eliminates an entire class of null-pointer crashes.</p>
+
+<!-- ============================================================ -->
+<h2 id="compose">6. Jetpack Compose: The UI Framework</h2>
+
+<p>Compose is a declarative UI framework — you describe what the UI should look like given the current state, and Compose figures out what to redraw when state changes.</p>
+
+<div class="callout analogy">
+  <strong>Mental model:</strong> Think of it like a function that maps state → pixels. Every time state changes, Compose re-calls the affected <code>@Composable</code> functions and diffs the result, updating only what changed. This is similar to how React works in the web world.
+</div>
+
+<h3>Composable functions</h3>
+<p>Any function annotated with <code>@Composable</code> can emit UI elements:</p>
+<pre><code>@Composable
+fun CalcButton(label: String, onClick: () -> Unit) {
+    Button(onClick = onClick) {
+        Text(text = label)
+    }
+}</code></pre>
+<p>These are not widgets you instantiate — they're functions you call. Compose tracks which composables depend on which state and only re-executes the ones that need to change.</p>
+
+<h3>State and recomposition</h3>
+<pre><code>val state by vm.uiState.collectAsStateWithLifecycle()
+// 'by' delegates property access to the StateFlow collector
+// Whenever uiState emits a new value, the composable recomposes</code></pre>
+<p><code>StateFlow</code> is a stream that always has a current value — like an observable variable. <code>collectAsStateWithLifecycle()</code> subscribes to it and triggers recomposition on change.</p>
+
+<h3>Layout primitives</h3>
+<table>
+  <tr><th>Compose</th><th>Equivalent</th></tr>
+  <tr><td><code>Column</code></td><td>Vertical stack (CSS flexbox column)</td></tr>
+  <tr><td><code>Row</code></td><td>Horizontal stack (CSS flexbox row)</td></tr>
+  <tr><td><code>Box</code></td><td>Overlapping children (CSS position: relative)</td></tr>
+  <tr><td><code>Modifier.weight(1f)</code></td><td>flex: 1 — takes proportional space</td></tr>
+  <tr><td><code>Modifier.fillMaxWidth()</code></td><td>width: 100%</td></tr>
+  <tr><td><code>Spacer(Modifier.weight(1f))</code></td><td>Pushes siblings apart (like CSS justify-content: space-between)</td></tr>
+</table>
+
+<h3>ViewModel: separating state from UI</h3>
+<p>The <code>ViewModel</code> is a lifecycle-aware class that survives screen rotations. It holds all mutable state and business logic. The Compose UI reads from it but never writes directly — it only sends <code>CalculatorAction</code> events down to the ViewModel. This is the MVVM (Model-View-ViewModel) pattern:</p>
+<pre><code>UI (CalculatorScreen) ──actions──▶ ViewModel ──uiState──▶ UI
+                                       │
+                                   Repository
+                                       │
+                                 API / DataStore</code></pre>
+
+<!-- ============================================================ -->
+<h2 id="files">7. Every File Explained</h2>
+
+<h3><span class="file-header">AndroidManifest.xml</span></h3>
+<p>The app's declaration — read by Android's package manager when installing. Declares:</p>
+<ul>
+  <li><code>INTERNET</code> permission — required to make HTTP requests</li>
+  <li>The <code>MainActivity</code> as the launcher activity (what opens when you tap the icon)</li>
+  <li>The app's theme, label, and other metadata</li>
+</ul>
+<p>Without <code>android:exported="true"</code> on the main activity, the launcher can't start it. Without the INTERNET permission, any network call will fail silently.</p>
+
+<h3><span class="file-header">MainActivity.kt</span></h3>
+<p>The entry point. In Android, there is no <code>main()</code> function — the OS calls <code>onCreate()</code> on the declared launcher Activity. Ours does three things:</p>
+<ol>
+  <li><code>enableEdgeToEdge()</code> — lets the app draw behind the system bars</li>
+  <li><code>setContent { }</code> — hands control to Compose, replacing the traditional XML inflation step</li>
+  <li>Wraps everything in <code>CalcAppTheme</code> so Material3 colours apply everywhere</li>
+</ol>
+
+<h3><span class="file-header">ui/theme/Theme.kt</span></h3>
+<p>Sets up Material3's colour system. On Android 12+ it uses <strong>dynamic colour</strong> — the system extracts a palette from the user's wallpaper. On older versions it falls back to the default Material3 palette. The <code>isSystemInDarkTheme()</code> call picks light or dark automatically.</p>
+
+<h3><span class="file-header">data/ExchangeRateApi.kt</span></h3>
+<p>Two things in one file:</p>
+
+<p><strong>The response model</strong> — a data class Retrofit deserialises the JSON into:</p>
+<pre><code>data class ExchangeRateResponse(
+    val result: String,
+    @SerializedName("base_code") val baseCode: String,  // JSON key ≠ Kotlin name
+    val rates: Map&lt;String, Double&gt;  // e.g. {"GBP": 0.79, "EUR": 0.92, ...}
+)</code></pre>
+
+<p><strong>The API interface</strong> — Retrofit generates an implementation at runtime from this interface:</p>
+<pre><code>interface ExchangeRateApi {
+    @GET("v6/latest/{base}")            // HTTP GET, {base} is a path parameter
+    suspend fun getRates(@Path("base") base: String): ExchangeRateResponse
+}</code></pre>
+<p>Calling <code>api.getRates("USD")</code> makes a GET request to <code>https://open.er-api.com/v6/latest/USD</code> and returns the deserialised response. The <code>suspend</code> keyword means it runs asynchronously without blocking.</p>
+
+<h3><span class="file-header">data/ExchangeRateRepository.kt</span></h3>
+<p>The data layer — responsible for answering "give me the rates" regardless of whether they come from the network or the cache.</p>
+
+<p><strong>DataStore</strong> is Android's key-value store (replacing SharedPreferences). It's backed by a file and accessed via coroutines. We use it to persist:</p>
+<ul>
+  <li>The JSON string of cached rates (<code>RATES_KEY</code>)</li>
+  <li>The timestamp of the last fetch (<code>TIMESTAMP_KEY</code>)</li>
+  <li>The base currency used for the cached rates (<code>BASE_KEY</code>, always "USD")</li>
+  <li>The user's selected to/from currencies (<code>HOME_CURRENCY_KEY</code>, <code>LOCAL_CURRENCY_KEY</code>)</li>
+</ul>
+
+<p><strong>Cache logic</strong> — <code>getRates(baseCurrency, forceRefresh)</code>:</p>
+<pre><code>val cacheValid = !forceRefresh
+    &amp;&amp; cachedJson != null
+    &amp;&amp; cachedBase == baseCurrency
+    &amp;&amp; System.currentTimeMillis() - timestamp &lt; 24h
+
+if (cacheValid) return deserialise(cachedJson)
+
+try {
+    val response = api.getRates(baseCurrency)
+    saveToCache(response)
+    return response.rates
+} catch (e: Exception) {
+    if (cachedJson != null) return deserialise(cachedJson)  // graceful offline fallback
+    else throw e  // no cache, no network — propagate the error
+}</code></pre>
+
+<p>The <code>forceRefresh = true</code> path is taken when the user taps the refresh button. The normal startup path passes <code>forceRefresh = false</code> so cached rates are used if they are less than 24 hours old.</p>
+
+<p><strong>Currency preference persistence</strong>:</p>
+<pre><code>suspend fun saveCurrencyPrefs(home: String, local: String)
+suspend fun loadCurrencyPrefs(): Pair&lt;String, String&gt;  // defaults: "EUR" to, "GBP" from</code></pre>
+<p>These are called every time the user changes or swaps currencies, so the selection is restored on next launch.</p>
+
+<h3><span class="file-header">ui/CalculatorViewModel.kt</span></h3>
+<p>The core of the app. Holds all mutable state as a single <code>CalculatorUiState</code> emitted via a <code>StateFlow</code>.</p>
+
+<h4>CalculatorUiState</h4>
+<p>Everything the UI needs in one immutable snapshot:</p>
+<pre><code>data class CalculatorUiState(
+    val display: String = "0",           // main large number shown on screen
+    val expression: String = "",         // smaller grey line above display, e.g. "12 + (34 ×"
+    val toCurrency: String = "EUR",      // destination currency
+    val fromCurrency: String = "GBP",    // source currency
+    val toAmount: String = "EUR 0.00",   // converted value in to-currency
+    val fromAmount: String = "GBP 0.00", // current input value in from-currency
+    val exchangeRateLabel: String = "",  // e.g. "1 GBP (British Pound Sterling) = 1.1732 EUR (Euro)"
+    val lastUpdated: String = "",        // e.g. "Updated 12 Jun 14:30"
+    val isRefreshing: Boolean = false,   // true while a network fetch is in-flight
+    val availableCurrencies: List&lt;String&gt; = emptyList(), // sorted ISO codes for the dropdown
+    val isError: Boolean = false
+)</code></pre>
+
+<h4>CalculatorAction</h4>
+<p>Every button press is modelled as a sealed class instance sent to <code>onAction()</code>. The UI never mutates state directly.</p>
+<pre><code>sealed class CalculatorAction {
+    data class Digit(val value: Int) : CalculatorAction()
+    object Decimal : CalculatorAction()          // the "." button
+    object Clear : CalculatorAction()            // AC
+    object Delete : CalculatorAction()           // ⌫ backspace
+    object Calculate : CalculatorAction()        // =
+    object Percent : CalculatorAction()          // % — divides current number by 100
+    object SmartBracket : CalculatorAction()     // context-aware ( or )
+    object OpenBracket : CalculatorAction()      // always opens a bracket
+    object CloseBracket : CalculatorAction()     // always closes a bracket
+    object RefreshRates : CalculatorAction()     // force a new network fetch
+    object SwapCurrencies : CalculatorAction()   // swap from ↔ to
+    data class Operation(val symbol: Char) : CalculatorAction()    // +, -, *, /
+    data class SetToCurrency(val code: String) : CalculatorAction()
+    data class SetFromCurrency(val code: String) : CalculatorAction()
+}</code></pre>
+
+<h4>Bracket stack architecture</h4>
+<p>Supporting nested sub-expressions requires more than two operand variables. The solution is a stack. Each time an opening bracket is pressed, the outer expression context (the left-hand value and pending operator) is saved on the stack. When a closing bracket is pressed, the inner expression is resolved and the outer context is restored.</p>
+
+<pre><code>// Represents the outer expression state frozen when ( was pressed
+private data class BracketState(val firstOperand: Double?, val pendingOp: Char?)
+
+private val bracketStack = mutableListOf&lt;BracketState&gt;()</code></pre>
+
+<p>Opening a bracket (<code>handleOpenBracket</code>):</p>
+<pre><code>bracketStack.add(BracketState(firstOperand, pendingOp))
+firstOperand = null
+pendingOp = null
+currentInput = "0"
+expressionDisplay.append("(")</code></pre>
+
+<p>Closing a bracket (<code>handleCloseBracket</code>):</p>
+<pre><code>// 1. Resolve the inner expression
+val bracketResult = if (firstOperand != null &amp;&amp; pendingOp != null)
+    applyOp(firstOperand!!, currentInput.toDouble(), pendingOp!!)
+else currentInput.toDouble()
+expressionDisplay.append("$currentInput)")
+
+// 2. Restore the outer context
+val (outerFirst, outerOp) = bracketStack.removeLast()
+firstOperand = outerFirst; pendingOp = outerOp
+
+// 3. Apply the outer operator to the bracket result
+val result = if (firstOperand != null &amp;&amp; pendingOp != null)
+    applyOp(firstOperand!!, bracketResult, pendingOp!!)
+else bracketResult
+
+firstOperand = result; pendingOp = null
+currentInput = formatResult(result)
+shouldResetInput = true</code></pre>
+
+<h4>Smart bracket button</h4>
+<p>The <code>( )</code> button is context-aware — it opens or closes depending on what's happening:</p>
+<pre><code>is CalculatorAction.SmartBracket -&gt; {
+    val atStart = firstOperand == null &amp;&amp; pendingOp == null
+        &amp;&amp; currentInput == "0" &amp;&amp; bracketStack.isEmpty() &amp;&amp; !justCalculated
+    if (shouldResetInput || atStart) handleOpenBracket()
+    else if (bracketStack.isNotEmpty()) handleCloseBracket()
+    // else: mid-number entry with no open bracket — do nothing
+}</code></pre>
+
+<p><code>shouldResetInput</code> is <code>true</code> after an operator is pressed (the next input starts a new operand). That's also the right moment to open a bracket. If there are open brackets and we're part-way through entering a number, the button closes the innermost bracket.</p>
+
+<h4>Expression display</h4>
+<p>The small grey line above the main number (e.g. <code>12 + (34 ×</code>) is driven by a <code>StringBuilder</code> maintained in parallel with the state machine:</p>
+<pre><code>private val expressionDisplay = StringBuilder()</code></pre>
+<p>Each operator press, open bracket, and close bracket appends to it. AC and = both clear it entirely. The backspace button, when <code>shouldResetInput</code> is true, trims the last operator token back off it so the expression stays consistent with the state.</p>
+
+<h4>Private state variables</h4>
+<pre><code>private var currentInput = "0"       // number currently shown in the main display
+private var firstOperand: Double?    // left-hand operand, stored after pressing an operator
+private var pendingOp: Char?         // operator waiting to be applied (+, -, *, /)
+private var justCalculated = false   // true after = is pressed; next digit starts a fresh calculation
+private var shouldResetInput = false // true after operator press; next digit replaces the display</code></pre>
+
+<p>The <code>shouldResetInput</code> flag solves the most common calculator bug: pressing 6, 5, +, 6, 5 would produce 6565 without it, because the display isn't cleared after +.</p>
+
+<h4>Currency conversion</h4>
+<p>All rates from the API are relative to USD (1 USD = X of each currency). Cross-rate conversion is therefore:</p>
+<pre><code>val toValue = value * toRate / fromRate
+// Example: 100 GBP to EUR, where GBP rate = 1.27, EUR rate = 1.08 (both relative to 1 USD)
+// toValue = 100 * 1.08 / 1.27 = 85.04 EUR</code></pre>
+
+<p>The exchange rate label is constructed with full currency names from <code>java.util.Currency</code>:</p>
+<pre><code>val fromName = JavaCurrency.getInstance(fromCode).displayName  // e.g. "British Pound Sterling"
+val toName   = JavaCurrency.getInstance(toCode).displayName    // e.g. "Euro"
+val rateLabel = "1 $fromCode ($fromName) = ${"%.4f".format(toRate / fromRate)} $toCode ($toName)"
+// → "1 GBP (British Pound Sterling) = 1.1732 EUR (Euro)"</code></pre>
+
+<h3><span class="file-header">ui/CalculatorScreen.kt</span></h3>
+<p>All the UI code. The screen layout from top to bottom:</p>
+<ol>
+  <li><strong>Currency selectors row</strong> — From selector | ⇄ swap icon button | To selector</li>
+  <li><strong>Exchange rate info + refresh</strong> — rate label and last-updated timestamp on the left, refresh icon on the right</li>
+  <li><strong>Spacer (weight 1f)</strong> — flexible gap that pushes the calculator display and buttons to the bottom of the screen</li>
+  <li><strong>Currency amounts</strong> — from amount (blue, 20sp) and to amount (green, 20sp), right-aligned</li>
+  <li><strong>Expression line</strong> — small grey text showing the accumulated expression (hidden when empty)</li>
+  <li><strong>Main display</strong> — large white number, 72sp, light weight, right-aligned</li>
+  <li><strong>Button grid</strong></li>
+</ol>
+
+<h4>CurrencySelector</h4>
+<p>A composable that renders an <code>OutlinedButton</code> labelled "From: GBP" or "To: EUR". Tapping it opens a <code>DropdownMenu</code> with:</p>
+<ul>
+  <li>A search <code>OutlinedTextField</code> at the top</li>
+  <li>A filtered list of all available currencies, each entry showing the ISO code (14sp bold) on one line and the full display name (11sp grey) below it</li>
+</ul>
+<pre><code>val filtered = available.filter { code -&gt;
+    val name = try { JavaCurrency.getInstance(code).displayName } catch (e: Exception) { "" }
+    code.contains(search, ignoreCase = true) || name.contains(search, ignoreCase = true)
+}</code></pre>
+<p>Filtering matches on both code and name, so searching "pound" finds GBP, EGP, SYP, and others.</p>
+
+<h4>Swap button</h4>
+<p>Between the two <code>CurrencySelector</code> composables sits an <code>IconButton</code> with the <code>SwapHoriz</code> icon (from <code>material-icons-extended</code>). Pressing it dispatches <code>CalculatorAction.SwapCurrencies</code>. The ViewModel swaps the two currency codes and immediately calls <code>saveCurrencyPrefs</code> to persist the new order.</p>
+
+<h4>Button grid layout</h4>
+<p>Five rows of four equal-width buttons, each 72dp tall with <code>CircleShape</code>. All buttons use <code>Modifier.weight(1f)</code> — including the zero and equals — so every slot is the same width:</p>
+<table>
+  <tr><th>Row</th><th>Col 1</th><th>Col 2</th><th>Col 3</th><th>Col 4</th></tr>
+  <tr><td>1</td><td>AC (light/black)</td><td>( ) (light/black)</td><td>% (light/black)</td><td>÷ (orange)</td></tr>
+  <tr><td>2</td><td>7 (dark)</td><td>8 (dark)</td><td>9 (dark)</td><td>× (orange)</td></tr>
+  <tr><td>3</td><td>4 (dark)</td><td>5 (dark)</td><td>6 (dark)</td><td>− (orange)</td></tr>
+  <tr><td>4</td><td>1 (dark)</td><td>2 (dark)</td><td>3 (dark)</td><td>+ (orange)</td></tr>
+  <tr><td>5</td><td>0 (dark)</td><td>. (dark)</td><td>⌫ (dark)</td><td>= (orange)</td></tr>
+</table>
+
+<p>Rows 1–4 are defined as a <code>List&lt;List&lt;BtnDef&gt;&gt;</code> and rendered with a generic loop. Row 5 is rendered separately (originally to allow a wide zero button) but currently uses the same equal-weight layout.</p>
+
+<p>Colour constants:</p>
+<pre><code>private val BgColor      = Color(0xFF1C1C1E)  // near-black background
+private val ButtonDark   = Color(0xFF333333)  // digit buttons
+private val ButtonLight  = Color(0xFFA5A5A5)  // AC, ( ), %
+private val ButtonOrange = Color(0xFFFF9F0A)  // operators and =</code></pre>
+
+<!-- ============================================================ -->
+<h2 id="data-flow">8. How the App Works End-to-End</h2>
+
+<h3>App launch</h3>
+<ol>
+  <li>Android starts <code>MainActivity.onCreate()</code></li>
+  <li>Compose starts rendering <code>CalculatorScreen</code></li>
+  <li>The <code>viewModel()</code> call creates a <code>CalculatorViewModel</code> instance</li>
+  <li>The ViewModel's <code>init</code> block runs:
+    <ul>
+      <li>Loads saved currency preferences from DataStore (defaults: EUR to, GBP from)</li>
+      <li>Calls <code>fetchRates(forceRefresh = false)</code></li>
+    </ul>
+  </li>
+  <li><code>fetchRates</code> calls <code>repository.getRates("USD", false)</code>, which checks the cache:
+    <ul>
+      <li>Cache &lt; 24h old → deserialise and return immediately</li>
+      <li>Cache stale → fetch from <code>open.er-api.com</code>, update cache, return</li>
+      <li>Offline and cache exists → return stale cache silently</li>
+      <li>Offline and no cache → <code>lastUpdated</code> is set to "Offline"</li>
+    </ul>
+  </li>
+  <li>ViewModel updates <code>_uiState</code> with the rate map, sorted currency list, and timestamp</li>
+  <li>The <code>StateFlow</code> emits the new state; Compose recomposes the screen</li>
+</ol>
+
+<h3>User presses a digit</h3>
+<ol>
+  <li>Button's <code>onClick</code> calls <code>vm.onAction(CalculatorAction.Digit(7))</code></li>
+  <li><code>onAction</code> routes to <code>handleDigit(7)</code></li>
+  <li>If <code>shouldResetInput</code> or <code>justCalculated</code> is true, <code>currentInput</code> is replaced; otherwise the digit is appended (up to 12 characters)</li>
+  <li><code>updateDisplay()</code> rebuilds the expression string from <code>expressionDisplay</code> and emits a new <code>CalculatorUiState</code></li>
+  <li><code>updateCurrencyDisplay()</code> recalculates both converted amounts and the rate label, emitting another state update</li>
+  <li>Compose redraws only the affected composables</li>
+</ol>
+
+<h3>User presses an operator</h3>
+<ol>
+  <li><code>handleOperation('+')</code> is called</li>
+  <li>If <code>shouldResetInput</code> is already true (operator chaining), the pending operator symbol in <code>expressionDisplay</code> is replaced in-place</li>
+  <li>Otherwise, if there is already a pending operation, it is evaluated first: <code>firstOperand = applyOp(firstOperand, current, pendingOp)</code></li>
+  <li><code>firstOperand</code> now holds the left-hand value; <code>pendingOp</code> stores the operator character</li>
+  <li>The operator symbol is appended to <code>expressionDisplay</code></li>
+  <li><code>shouldResetInput = true</code> — the next digit will replace the display rather than append</li>
+</ol>
+
+<h3>User presses ( )</h3>
+<p>The smart bracket button checks context before acting:</p>
+<ul>
+  <li><strong>Open</strong> — if <code>shouldResetInput</code> is true (just pressed an operator) or the state is completely fresh: push <code>BracketState(firstOperand, pendingOp)</code> onto the stack, reset inner state, append <code>(</code> to the expression</li>
+  <li><strong>Close</strong> — if there are open brackets: resolve the inner expression, pop the stack to restore the outer operator, apply that operator to the bracket result, set <code>shouldResetInput = true</code></li>
+  <li><strong>Nothing</strong> — mid-number entry with no open brackets: the button is ignored</li>
+</ul>
+
+<h3>User presses =</h3>
+<ol>
+  <li><code>handleCalculate()</code> evaluates any remaining pending operation on <code>currentInput</code></li>
+  <li>If there are unclosed brackets on the stack, they are resolved in reverse order (auto-close)</li>
+  <li><code>currentInput</code> is set to the final formatted result</li>
+  <li>All state is reset: <code>firstOperand = null</code>, <code>pendingOp = null</code>, <code>bracketStack.clear()</code>, <code>expressionDisplay.clear()</code></li>
+  <li><code>justCalculated = true</code> — the next digit starts a fresh calculation rather than appending to the result</li>
+</ol>
+
+<h3>Network request lifecycle</h3>
+<pre><code>UI thread                        IO thread (coroutine dispatcher)
+────────────────────────────────────────────────────────────────
+onAction(RefreshRates)
+  └─ fetchRates(force=true)
+       └─ viewModelScope.launch { ──────────────────────────────▶ coroutine starts
+            isRefreshing = true                                    repository.getRates()
+            [suspend point] ◀──────────────────────────────────── HTTP response received
+            rates = result
+            uiState updated (currency list, timestamp)
+            isRefreshing = false
+            updateCurrencyDisplay()
+          }</code></pre>
+
+<!-- ============================================================ -->
+<h2 id="building">9. Building and Installing Manually</h2>
+
+<h3>Prerequisites</h3>
+<ul>
+  <li>JDK 17: <code>sudo apt install openjdk-17-jdk</code></li>
+  <li>Android SDK at <code>~/android</code> with platform-tools, platforms;android-35, build-tools;35.0.0</li>
+  <li><code>local.properties</code> containing <code>sdk.dir=/home/rich/android</code></li>
+</ul>
+
+<h3>Build commands</h3>
+<pre><code># Debug build (signed with a debug key — installs on any device with debugging enabled)
+cd ~/calcApp
+./gradlew assembleDebug
+
+# Output
+app/build/outputs/apk/debug/app-debug.apk
+
+# Clean build (use if you hit strange caching issues)
+./gradlew clean assembleDebug
+
+# See all available tasks
+./gradlew tasks</code></pre>
+
+<h3>Installing via ADB over WiFi</h3>
+<p>Requirements: phone and laptop on the same network, Developer Options enabled, Wireless Debugging enabled.</p>
+<pre><code># Step 1: Pair (one-time per ADB server instance)
+# Get pairing IP:port and 6-digit code from phone:
+# Settings → Developer Options → Wireless Debugging → Pair device with pairing code
+~/android/platform-tools/adb pair 192.168.x.x:&lt;pair-port&gt; &lt;6-digit-code&gt;
+
+# Step 2: Connect (use the port on the main Wireless Debugging screen, not the pairing port)
+~/android/platform-tools/adb connect 192.168.x.x:&lt;connect-port&gt;
+
+# Step 3: Install (-r replaces existing install)
+~/android/platform-tools/adb install -r app/build/outputs/apk/debug/app-debug.apk
+
+# Verify device is connected
+~/android/platform-tools/adb devices
+
+# View live logs
+~/android/platform-tools/adb logcat</code></pre>
+
+<div class="callout">
+  <strong>Pairing code note:</strong> Pairing codes expire in about 60 seconds. Have your ports and code ready before running the pair command. After successful pairing, the connect step persists as long as you don't kill the ADB server. The connect port (shown on the main Wireless Debugging screen) is different from the pairing port.
+</div>
+
+<h3>WSL2-specific notes</h3>
+<p>USB ADB doesn't work natively in WSL2 because WSL2 runs as a VM. Options:</p>
+<ul>
+  <li><strong>WiFi ADB</strong> (recommended) — works natively as long as phone and PC are on the same subnet</li>
+  <li><strong>usbipd-win</strong> — USB passthrough from Windows to WSL2; can be unreliable if Windows software (e.g. Samsung Smart Switch) holds the device</li>
+</ul>
+<p>The Samsung-specific udev rule at <code>/etc/udev/rules.d/51-android.rules</code> (vendor ID <code>04e8</code>) grants permission for USB ADB should you use the USB path in future.</p>
+
+<!-- ============================================================ -->
+<h2 id="extending">10. How to Extend the App</h2>
+
+<h3>Adding a new calculator operation (e.g. square root)</h3>
+<ol>
+  <li>Add <code>object SquareRoot : CalculatorAction()</code> to the sealed class in <code>CalculatorViewModel.kt</code></li>
+  <li>Add a <code>handleSquareRoot()</code> private function that reads <code>currentInput</code>, computes the result, and sets <code>currentInput = formatResult(result)</code></li>
+  <li>Add a case in the <code>onAction()</code> <code>when</code> block: <code>is CalculatorAction.SquareRoot -&gt; { handleSquareRoot(); updateDisplay() }</code></li>
+  <li>Add a <code>BtnDef("√", ButtonLight, Color.Black, CalculatorAction.SquareRoot)</code> entry in the appropriate row of <code>ButtonGrid</code> in <code>CalculatorScreen.kt</code></li>
+</ol>
+
+<h3>Changing the exchange rate API</h3>
+<p>Only <code>ExchangeRateApi.kt</code> needs to change. The repository, ViewModel, and UI are all isolated from the API details — they only see <code>Map&lt;String, Double&gt;</code>. If the new API uses a different base currency, update the <code>getRates("USD", ...)</code> call in <code>CalculatorViewModel.fetchRates()</code> and the cross-rate formula in <code>updateCurrencyDisplay()</code>.</p>
+
+<h3>Adding a third currency column</h3>
+<ol>
+  <li>Add <code>val extraCurrency: String</code> and <code>val extraAmount: String</code> to <code>CalculatorUiState</code></li>
+  <li>Add <code>data class SetExtraCurrency(val code: String) : CalculatorAction()</code></li>
+  <li>Extend <code>updateCurrencyDisplay()</code> to compute and emit the extra amount alongside the existing two</li>
+  <li>Add a third <code>CurrencySelector</code> and a third amount <code>Text</code> in <code>CalculatorScreen</code></li>
+</ol>
+
+<h3>Adding a calculation history screen</h3>
+<ol>
+  <li>Add <code>val history: List&lt;String&gt;</code> to <code>CalculatorUiState</code></li>
+  <li>Append the expression and result to it in <code>handleCalculate()</code> before clearing state</li>
+  <li>Create a <code>HistoryScreen.kt</code> composable that renders the list</li>
+  <li>Add navigation — the simplest approach is Jetpack Navigation Compose (<code>androidx.navigation:navigation-compose</code>)</li>
+</ol>
+
+<h3>Persisting calculation history across sessions</h3>
+<p>DataStore works well for simple key-value data but is awkward for a growing list. For calculation history, consider Room (Android's SQLite ORM). Add the Room dependency, create an <code>Entity</code> data class, a <code>Dao</code> interface, and a <code>Database</code> class. The repository pattern already isolates the rest of the app from storage details — add a <code>HistoryRepository</code> alongside the existing <code>ExchangeRateRepository</code>.</p>
+
+<hr style="margin: 40px 0 24px; border: none; border-top: 1px solid #ddd;">
+<p style="color: #999; font-size: 12px; text-align: center;">CalcApp Developer Guide · Updated June 2026</p>
+
+</body>
+</html>
