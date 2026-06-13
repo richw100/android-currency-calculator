@@ -138,6 +138,27 @@ fun SettingsScreen(vm: CalculatorViewModel, modifier: Modifier = Modifier) {
                     colors = SwitchDefaults.colors(checkedThumbColor = Color.White, checkedTrackColor = colors.positiveColor)
                 )
             }
+
+            HorizontalDivider(modifier = Modifier.padding(horizontal = 16.dp), color = colors.divider)
+
+            Row(
+                modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 12.dp),
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Column(modifier = Modifier.weight(1f)) {
+                    Text("Exchange rates", color = colors.textPrimary, fontSize = 15.sp)
+                    Text(
+                        text = if (state.isOffline) "Offline — using cached rates" else state.lastUpdated,
+                        color = if (state.isOffline) colors.warningColor else colors.textSecondary,
+                        fontSize = 12.sp
+                    )
+                }
+                Text(
+                    text = "${state.availableCurrencies.size} currencies",
+                    color = colors.textMuted,
+                    fontSize = 12.sp
+                )
+            }
         }
 
         Spacer(Modifier.height(24.dp))

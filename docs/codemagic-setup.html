@@ -1,0 +1,151 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>iOS Build Setup — Codemagic</title>
+    <style>
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+            max-width: 780px;
+            margin: 40px auto;
+            padding: 0 24px;
+            color: #1c1c1e;
+            line-height: 1.6;
+        }
+        h1 { font-size: 28px; margin-bottom: 4px; }
+        h2 { font-size: 18px; margin-top: 36px; margin-bottom: 8px; border-bottom: 1px solid #d1d1d6; padding-bottom: 6px; }
+        p  { margin: 8px 0; }
+        ol, ul { padding-left: 20px; margin: 8px 0; }
+        li { margin: 6px 0; }
+        code {
+            background: #f2f2f7;
+            border-radius: 4px;
+            padding: 2px 6px;
+            font-size: 13px;
+            font-family: "SF Mono", Menlo, Consolas, monospace;
+        }
+        .step {
+            background: #f2f2f7;
+            border-left: 4px solid #00bcd4;
+            border-radius: 0 8px 8px 0;
+            padding: 14px 18px;
+            margin: 16px 0;
+        }
+        .step h3 { margin: 0 0 8px 0; font-size: 15px; }
+        table {
+            width: 100%;
+            border-collapse: collapse;
+            margin: 12px 0;
+            font-size: 14px;
+        }
+        th {
+            background: #f2f2f7;
+            text-align: left;
+            padding: 8px 12px;
+            border-bottom: 2px solid #d1d1d6;
+        }
+        td {
+            padding: 8px 12px;
+            border-bottom: 1px solid #e5e5ea;
+        }
+        .badge {
+            display: inline-block;
+            background: #34c759;
+            color: white;
+            border-radius: 4px;
+            padding: 1px 7px;
+            font-size: 12px;
+            font-weight: 600;
+        }
+        .note {
+            background: #fff9e6;
+            border: 1px solid #ff9f0a;
+            border-radius: 8px;
+            padding: 12px 16px;
+            font-size: 14px;
+            margin: 16px 0;
+        }
+        a { color: #007aff; text-decoration: none; }
+        a:hover { text-decoration: underline; }
+    </style>
+</head>
+<body>
+
+<h1>iOS Build Setup</h1>
+<p>How to build the iOS app using <a href="https://codemagic.io" target="_blank">Codemagic</a> CI/CD — no Mac required.</p>
+
+<h2>How it works</h2>
+<p>
+    The iOS project uses <strong>XcodeGen</strong> to generate the <code>.xcodeproj</code> from a
+    <code>project.yml</code> spec. Codemagic installs XcodeGen, generates the project, then builds it.
+    You never need Xcode locally — just push code and Codemagic does the rest.
+</p>
+<ul>
+    <li><code>ios/project.yml</code> — XcodeGen project spec</li>
+    <li><code>codemagic.yaml</code> — build pipeline (repo root)</li>
+    <li><code>ios/CalcApp/</code> — all Swift source files</li>
+</ul>
+
+<h2>Step 1 — Connect Codemagic</h2>
+<div class="step">
+    <h3>One-time setup</h3>
+    <ol>
+        <li>Go to <a href="https://codemagic.io" target="_blank">codemagic.io</a> and sign up with your GitHub account.</li>
+        <li>Click <strong>Add application</strong> and select <code>richw100/android-currency-calculator</code>.</li>
+        <li>Codemagic will detect <code>codemagic.yaml</code> automatically and list the <strong>iOS Debug Build</strong> workflow.</li>
+    </ol>
+</div>
+
+<h2>Step 2 — Trigger a build</h2>
+<div class="step">
+    <h3>Starting a build</h3>
+    <ol>
+        <li>Either push any commit to <code>main</code>, or open the Codemagic dashboard and click <strong>Start new build</strong>.</li>
+        <li>Select the <strong>iOS Debug Build</strong> workflow and click <strong>Start build</strong>.</li>
+        <li>The pipeline will:
+            <ul>
+                <li>Install XcodeGen via Homebrew</li>
+                <li>Run <code>xcodegen generate</code> inside <code>ios/</code></li>
+                <li>Build for the iOS Simulator (<code>iPhone 15</code>) with no signing required</li>
+            </ul>
+        </li>
+        <li>You'll receive a build result email at <code>richw999-play@yahoo.com</code>.</li>
+    </ol>
+</div>
+
+<div class="note">
+    <strong>No Apple Developer account needed</strong> for the simulator build — it compiles and verifies the code
+    without any signing certificates.
+</div>
+
+<h2>What's in the iOS app</h2>
+<table>
+    <thead>
+        <tr><th>Feature</th><th>Status</th></tr>
+    </thead>
+    <tbody>
+        <tr><td>Calculator (4-function + brackets + %)</td><td><span class="badge">Ready</span></td></tr>
+        <tr><td>Live currency conversion (161 currencies)</td><td><span class="badge">Ready</span></td></tr>
+        <tr><td>Currency picker with search + recents</td><td><span class="badge">Ready</span></td></tr>
+        <tr><td>Calculation history (50 entries, tap to restore)</td><td><span class="badge">Ready</span></td></tr>
+        <tr><td>Settings — dark/light/system, 5 accent colours, haptic</td><td><span class="badge">Ready</span></td></tr>
+        <tr><td>Custom exchange rates</td><td><span class="badge">Ready</span></td></tr>
+        <tr><td>Offline indicator</td><td><span class="badge">Ready</span></td></tr>
+        <tr><td>Copy/paste on display and currency amounts</td><td><span class="badge">Ready</span></td></tr>
+        <tr><td>Persistence (UserDefaults)</td><td><span class="badge">Ready</span></td></tr>
+    </tbody>
+</table>
+
+<h2>Step 3 — Real device / App Store (later)</h2>
+<p>Once the simulator build passes, distributing to a real device or the App Store requires:</p>
+<ol>
+    <li>An <strong>Apple Developer account</strong> ($99/year at <a href="https://developer.apple.com" target="_blank">developer.apple.com</a>).</li>
+    <li>A <strong>distribution certificate</strong> and <strong>provisioning profile</strong> — generated in Xcode or Apple Developer portal.</li>
+    <li>Adding the certificate and profile to Codemagic under <strong>Teams → Code signing identities</strong>.</li>
+    <li>Updating <code>codemagic.yaml</code> with the signing configuration and switching the build destination from simulator to <code>generic/platform=iOS</code>.</li>
+</ol>
+<p>This can be set up when the app is ready for TestFlight or App Store submission.</p>
+
+</body>
+</html>

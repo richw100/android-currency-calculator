@@ -4,6 +4,7 @@ import android.content.Intent
 import android.net.Uri
 import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.background
+import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.combinedClickable
 import androidx.compose.foundation.isSystemInDarkTheme
@@ -45,6 +46,7 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import kotlin.math.abs
+import kotlinx.coroutines.launch
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.viewmodel.compose.viewModel
 import com.example.calcapp.R
@@ -258,16 +260,19 @@ fun AboutScreen(modifier: Modifier = Modifier) {
 
 // ── Calculator screen ─────────────────────────────────────────────────────────
 
-@OptIn(ExperimentalFoundationApi::class)
+@OptIn(ExperimentalFoundationApi::class, ExperimentalMaterial3Api::class)
 @Composable
 fun CalculatorScreen(vm: CalculatorViewModel = viewModel(), modifier: Modifier = Modifier) {
     val state by vm.uiState.collectAsStateWithLifecycle()
     val colors = LocalAppColors.current
     val context = LocalContext.current
     val clipboard = LocalClipboardManager.current
+    val scope = rememberCoroutineScope()
     var showRefreshDialog by remember { mutableStateOf(false) }
     var warningCurrency by remember { mutableStateOf("") }
     var displayMenuExpanded by remember { mutableStateOf(false) }
+    val infoTooltipState = rememberTooltipState()
+    val rateLabelTooltipState = rememberTooltipState()
 
     val warningEntry = state.customRates[warningCurrency]
     if (warningCurrency.isNotEmpty() && warningEntry != null) {
@@ -301,53 +306,108 @@ fun CalculatorScreen(vm: CalculatorViewModel = viewModel(), modifier: Modifier =
         )
     }
 
-    Column(modifier = modifier.fillMaxSize()) {
-        // Currency selectors
-        Row(
+    Column(modifier = modifier.fillMaxWidth().verticalScroll(rememberScrollState())) {
+        // Mode toggle
+        SingleChoiceSegmentedButtonRow(
             modifier = Modifier
                 .fillMaxWidth()
-                .padding(horizontal = 12.dp, vertical = 4.dp),
-            horizontalArrangement = Arrangement.spacedBy(8.dp)
+                .padding(start = 12.dp, end = 12.dp, top = 4.dp, bottom = 2.dp)
         ) {
-            CurrencySelector(
-                label = "From",
-                selected = state.fromCurrency,
-                available = state.availableCurrencies,
-                recentCurrencies = state.recentCurrencies,
-                customRates = state.customRates,
-                onSelected = { code ->
-                    vm.onAction(CalculatorAction.SetFromCurrency(code))
-                    if (state.customRates.containsKey(code)) warningCurrency = code
-                },
-                modifier = Modifier.weight(1f)
-            )
-            IconButton(onClick = { vm.onAction(CalculatorAction.SwapCurrencies) }) {
-                Icon(imageVector = Icons.Default.SwapHoriz, contentDescription = "Swap currencies", tint = colors.textSecondary)
-            }
-            CurrencySelector(
-                label = "To",
-                selected = state.toCurrency,
-                available = state.availableCurrencies,
-                recentCurrencies = state.recentCurrencies,
-                customRates = state.customRates,
-                onSelected = { code ->
-                    vm.onAction(CalculatorAction.SetToCurrency(code))
-                    if (state.customRates.containsKey(code)) warningCurrency = code
-                },
-                modifier = Modifier.weight(1f)
-            )
+            SegmentedButton(
+                selected = state.conversionMode == ConversionMode.CURRENCY,
+                onClick = { vm.onAction(CalculatorAction.SetConversionMode(ConversionMode.CURRENCY)) },
+                shape = SegmentedButtonDefaults.itemShape(index = 0, count = 2)
+            ) { Text("💱  Currency", fontSize = 12.sp) }
+            SegmentedButton(
+                selected = state.conversionMode == ConversionMode.DISTANCE,
+                onClick = { vm.onAction(CalculatorAction.SetConversionMode(ConversionMode.DISTANCE)) },
+                shape = SegmentedButtonDefaults.itemShape(index = 1, count = 2)
+            ) { Text("📏  Distance", fontSize = 12.sp) }
         }
 
-        // Exchange rate info + refresh
-        Row(
-            modifier = Modifier
-                .fillMaxWidth()
-                .padding(horizontal = 16.dp, vertical = 2.dp),
-            verticalAlignment = Alignment.CenterVertically
-        ) {
-            Column(modifier = Modifier.weight(1f)) {
+        if (state.conversionMode == ConversionMode.CURRENCY) {
+            // Currency selectors + inline refresh
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(start = 12.dp, end = 12.dp, top = 2.dp, bottom = 2.dp),
+                horizontalArrangement = Arrangement.spacedBy(8.dp),
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                TooltipBox(
+                    positionProvider = TooltipDefaults.rememberPlainTooltipPositionProvider(),
+                    tooltip = { PlainTooltip { Text(state.lastUpdated) } },
+                    state = infoTooltipState
+                ) {
+                    IconButton(onClick = { scope.launch { infoTooltipState.show() } }) {
+                        Icon(Icons.Default.Info, contentDescription = "Last updated", tint = colors.textMuted, modifier = Modifier.size(18.dp))
+                    }
+                }
+                CurrencySelector(
+                    label = "From",
+                    selected = state.fromCurrency,
+                    available = state.availableCurrencies,
+                    recentCurrencies = state.recentCurrencies,
+                    customRates = state.customRates,
+                    onSelected = { code ->
+                        vm.onAction(CalculatorAction.SetFromCurrency(code))
+                        if (state.customRates.containsKey(code)) warningCurrency = code
+                    },
+                    modifier = Modifier.weight(1f)
+                )
+                IconButton(onClick = { vm.onAction(CalculatorAction.SwapCurrencies) }) {
+                    Icon(Icons.Default.SwapHoriz, contentDescription = "Swap currencies", tint = colors.textSecondary)
+                }
+                CurrencySelector(
+                    label = "To",
+                    selected = state.toCurrency,
+                    available = state.availableCurrencies,
+                    recentCurrencies = state.recentCurrencies,
+                    customRates = state.customRates,
+                    onSelected = { code ->
+                        vm.onAction(CalculatorAction.SetToCurrency(code))
+                        if (state.customRates.containsKey(code)) warningCurrency = code
+                    },
+                    modifier = Modifier.weight(1f)
+                )
+                IconButton(
+                    onClick = {
+                        val hasCustom = state.customRates.containsKey(state.fromCurrency)
+                            || state.customRates.containsKey(state.toCurrency)
+                        if (hasCustom) showRefreshDialog = true
+                        else vm.onAction(CalculatorAction.RefreshRates)
+                    },
+                    enabled = !state.isRefreshing
+                ) {
+                    if (state.isRefreshing) {
+                        CircularProgressIndicator(modifier = Modifier.size(18.dp), color = colors.textSecondary, strokeWidth = 2.dp)
+                    } else {
+                        Icon(Icons.Default.Refresh, contentDescription = "Refresh rates", tint = colors.textSecondary, modifier = Modifier.size(20.dp))
+                    }
+                }
+            }
+
+            // Exchange rate info (no last-updated — see Settings)
+            Column(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(horizontal = 16.dp, vertical = 2.dp)
+            ) {
                 if (state.exchangeRateLabel.isNotEmpty()) {
-                    Text(text = state.exchangeRateLabel, color = colors.textSecondary, fontSize = 12.sp)
+                    TooltipBox(
+                        positionProvider = TooltipDefaults.rememberPlainTooltipPositionProvider(),
+                        tooltip = { PlainTooltip { Text(state.exchangeRateLabel) } },
+                        state = rateLabelTooltipState
+                    ) {
+                        Text(
+                            text = state.exchangeRateLabel,
+                            color = colors.textSecondary,
+                            fontSize = 12.sp,
+                            maxLines = 1,
+                            overflow = TextOverflow.Ellipsis,
+                            modifier = Modifier.clickable { scope.launch { rateLabelTooltipState.show() } }
+                        )
+                    }
                 }
                 state.customRatePctDiff?.let { pct ->
                     val isAbove = pct >= 0
@@ -361,78 +421,75 @@ fun CalculatorScreen(vm: CalculatorViewModel = viewModel(), modifier: Modifier =
                         fontSize = 11.sp
                     )
                 }
-                Row(verticalAlignment = Alignment.CenterVertically) {
-                    if (state.isOffline) {
-                        Icon(
-                            imageVector = Icons.Default.WifiOff,
-                            contentDescription = "Offline",
-                            tint = colors.warningColor,
-                            modifier = Modifier.size(11.dp)
-                        )
+                if (state.isOffline) {
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        Icon(Icons.Default.WifiOff, contentDescription = "Offline", tint = colors.warningColor, modifier = Modifier.size(11.dp))
                         Spacer(Modifier.width(3.dp))
+                        Text("Offline — using cached rates", color = colors.warningColor, fontSize = 11.sp)
                     }
-                    Text(
-                        text = state.lastUpdated,
-                        color = if (state.isOffline) colors.warningColor else colors.textSecondary,
-                        fontSize = 11.sp
-                    )
                 }
             }
-            IconButton(
-                onClick = {
-                    val hasCustom = state.customRates.containsKey(state.fromCurrency)
-                        || state.customRates.containsKey(state.toCurrency)
-                    if (hasCustom) showRefreshDialog = true
-                    else vm.onAction(CalculatorAction.RefreshRates)
-                },
-                enabled = !state.isRefreshing
+        } else {
+            // Distance unit row
+            DistanceConversionRow(
+                unit = state.distanceUnit,
+                rateLabel = state.exchangeRateLabel,
+                onSwap = { vm.onAction(CalculatorAction.SwapDistanceUnits) }
+            )
+        }
+
+            // Conversion display
+            val shareText = if (state.conversionMode == ConversionMode.CURRENCY)
+                "${currencyFlag(state.fromCurrency)} ${state.fromAmount} = ${currencyFlag(state.toCurrency)} ${state.toAmount}"
+            else
+                "${state.fromAmount} = ${state.toAmount}"
+            Column(
+                modifier = Modifier.fillMaxWidth().padding(horizontal = 20.dp, vertical = 4.dp),
+                horizontalAlignment = Alignment.End
             ) {
-                if (state.isRefreshing) {
-                    CircularProgressIndicator(modifier = Modifier.size(18.dp), color = colors.textSecondary, strokeWidth = 2.dp)
+                if (state.conversionMode == ConversionMode.CURRENCY) {
+                    CopyableAmount(text = "${currencyFlag(state.fromCurrency)} ${state.fromAmount}", color = colors.fromAmountColor, shareText = shareText)
+                    CopyableAmount(text = "${currencyFlag(state.toCurrency)} ${state.toAmount}", color = colors.toAmountColor, shareText = shareText)
                 } else {
-                    Icon(imageVector = Icons.Default.Refresh, contentDescription = "Refresh rates", tint = colors.textSecondary, modifier = Modifier.size(20.dp))
+                    CopyableAmount(text = state.fromAmount, color = colors.fromAmountColor, shareText = shareText)
+                    CopyableAmount(text = state.toAmount, color = colors.toAmountColor, shareText = shareText)
                 }
             }
-        }
 
-        Spacer(modifier = Modifier.weight(1f))
+            // Expression line — single line, right-aligned so tail is always visible
+            if (state.expression.isNotEmpty()) {
+                Text(
+                    text = state.expression,
+                    color = colors.textSecondary,
+                    fontSize = 20.sp,
+                    modifier = Modifier.fillMaxWidth().padding(horizontal = 24.dp),
+                    textAlign = TextAlign.End,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis
+                )
+            }
 
-        // Currency conversion display
-        val shareText = "${currencyFlag(state.fromCurrency)} ${state.fromAmount} = ${currencyFlag(state.toCurrency)} ${state.toAmount}"
-        Column(
-            modifier = Modifier.fillMaxWidth().padding(horizontal = 20.dp, vertical = 4.dp),
-            horizontalAlignment = Alignment.End
-        ) {
-            CopyableAmount(text = "${currencyFlag(state.fromCurrency)} ${state.fromAmount}", color = colors.fromAmountColor, shareText = shareText)
-            CopyableAmount(text = "${currencyFlag(state.toCurrency)} ${state.toAmount}", color = colors.toAmountColor, shareText = shareText)
-        }
-
-        // Expression line
-        if (state.expression.isNotEmpty()) {
-            Text(
-                text = state.expression,
-                color = colors.textSecondary,
-                fontSize = 26.sp,
-                modifier = Modifier.fillMaxWidth().padding(horizontal = 24.dp),
-                textAlign = TextAlign.End
-            )
-        }
-
-        // Main display
-        Box {
-            Text(
-                text = if (state.isError) "Error" else state.display,
-                color = colors.textPrimary,
-                fontSize = 72.sp,
-                fontWeight = FontWeight.Light,
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .padding(horizontal = 20.dp, vertical = 4.dp)
-                    .combinedClickable(onClick = {}, onLongClick = { displayMenuExpanded = true }),
-                textAlign = TextAlign.End,
-                maxLines = 1,
-                overflow = TextOverflow.Ellipsis
-            )
+            // Main display — font shrinks for longer numbers
+            val displayFontSize = when {
+                state.display.length <= 6  -> 72.sp
+                state.display.length <= 9  -> 56.sp
+                state.display.length <= 12 -> 44.sp
+                else                       -> 34.sp
+            }
+            Box {
+                Text(
+                    text = if (state.isError) "Error" else state.display,
+                    color = colors.textPrimary,
+                    fontSize = displayFontSize,
+                    fontWeight = FontWeight.Light,
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(horizontal = 20.dp, vertical = 4.dp)
+                        .combinedClickable(onClick = {}, onLongClick = { displayMenuExpanded = true }),
+                    textAlign = TextAlign.End,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis
+                )
             Box(modifier = Modifier.align(Alignment.TopEnd)) {
                 val clipText = clipboard.getText()?.text
                 val pasteNumber = remember(clipText) {
@@ -451,7 +508,9 @@ fun CalculatorScreen(vm: CalculatorViewModel = viewModel(), modifier: Modifier =
                                 Intent.createChooser(
                                     Intent(Intent.ACTION_SEND).apply {
                                         type = "text/plain"
-                                        putExtra(Intent.EXTRA_TEXT, "${state.display} ${state.fromCurrency} = ${state.toAmount}")
+                                        putExtra(Intent.EXTRA_TEXT, if (state.conversionMode == ConversionMode.CURRENCY)
+                                    "${state.display} ${state.fromCurrency} = ${state.toAmount}"
+                                else "${state.fromAmount} = ${state.toAmount}")
                                     }, null
                                 )
                             )
@@ -467,12 +526,11 @@ fun CalculatorScreen(vm: CalculatorViewModel = viewModel(), modifier: Modifier =
                 }
             }
         }
-
         // Button grid
         ButtonGrid(
             onAction = vm::onAction,
             hapticEnabled = state.hapticEnabled,
-            modifier = Modifier.padding(horizontal = 8.dp, vertical = 8.dp)
+            modifier = Modifier.padding(start = 8.dp, top = 2.dp, end = 8.dp, bottom = 8.dp)
         )
 
         OutlinedButton(
@@ -585,6 +643,65 @@ private fun CurrencyPickerRow(code: String, colors: AppColors, star: Boolean, on
             Text(currencyName(code), fontSize = 11.sp, color = colors.textSecondary)
         }
         if (star) Text("★", color = colors.warningColor, fontSize = 12.sp)
+    }
+}
+
+// ── Distance conversion row ───────────────────────────────────────────────────
+
+@Composable
+private fun DistanceConversionRow(
+    unit: DistanceUnit,
+    rateLabel: String,
+    onSwap: () -> Unit
+) {
+    val colors = LocalAppColors.current
+    val toUnit = if (unit == DistanceUnit.MILES) DistanceUnit.KM else DistanceUnit.MILES
+    Column(modifier = Modifier.fillMaxWidth()) {
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(horizontal = 12.dp, vertical = 4.dp),
+            horizontalArrangement = Arrangement.spacedBy(8.dp),
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            androidx.compose.foundation.layout.Box(
+                modifier = Modifier
+                    .weight(1f)
+                    .border(1.dp, colors.inputBorder, RoundedCornerShape(8.dp))
+                    .padding(horizontal = 12.dp, vertical = 10.dp)
+            ) {
+                Text(
+                    text = "From: ${unit.label} (${unit.abbr})",
+                    color = colors.textPrimary,
+                    fontSize = 13.sp,
+                    maxLines = 1
+                )
+            }
+            IconButton(onClick = onSwap) {
+                Icon(Icons.Default.SwapHoriz, contentDescription = "Swap units", tint = colors.textSecondary)
+            }
+            androidx.compose.foundation.layout.Box(
+                modifier = Modifier
+                    .weight(1f)
+                    .border(1.dp, colors.inputBorder, RoundedCornerShape(8.dp))
+                    .padding(horizontal = 12.dp, vertical = 10.dp)
+            ) {
+                Text(
+                    text = "To: ${toUnit.label} (${toUnit.abbr})",
+                    color = colors.textPrimary,
+                    fontSize = 13.sp,
+                    maxLines = 1
+                )
+            }
+        }
+        if (rateLabel.isNotEmpty()) {
+            Text(
+                text = rateLabel,
+                color = colors.textSecondary,
+                fontSize = 11.sp,
+                modifier = Modifier.padding(horizontal = 16.dp, vertical = 2.dp)
+            )
+        }
     }
 }
 

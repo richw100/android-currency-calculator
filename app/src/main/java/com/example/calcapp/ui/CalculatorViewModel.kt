@@ -13,6 +13,13 @@ import java.util.Currency as JavaCurrency
 import kotlin.math.abs
 import kotlin.math.floor
 
+enum class ConversionMode { CURRENCY, DISTANCE }
+
+enum class DistanceUnit(val label: String, val abbr: String) {
+    MILES("Miles", "mi"),
+    KM("Kilometres", "km")
+}
+
 data class CustomRateEntry(val base: String, val rate: Double)
 
 data class HistoryEntry(
@@ -22,7 +29,9 @@ data class HistoryEntry(
     val toAmount: String,
     val fromCurrency: String,
     val toCurrency: String,
-    val timestamp: Long
+    val timestamp: Long,
+    val conversionMode: String = "CURRENCY",
+    val note: String? = null
 )
 
 data class CalculatorUiState(
@@ -45,7 +54,9 @@ data class CalculatorUiState(
     val history: List<HistoryEntry> = emptyList(),
     val isOffline: Boolean = false,
     val darkModePref: DarkModePref = DarkModePref.SYSTEM,
-    val accentScheme: AccentScheme = AccentScheme.TEAL_GREEN
+    val accentScheme: AccentScheme = AccentScheme.TEAL_GREEN,
+    val conversionMode: ConversionMode = ConversionMode.CURRENCY,
+    val distanceUnit: DistanceUnit = DistanceUnit.MILES
 )
 
 sealed class CalculatorAction {
@@ -71,6 +82,10 @@ sealed class CalculatorAction {
     object ClearHistory : CalculatorAction()
     data class SetDarkMode(val pref: DarkModePref) : CalculatorAction()
     data class SetAccentScheme(val scheme: AccentScheme) : CalculatorAction()
+    data class SetConversionMode(val mode: ConversionMode) : CalculatorAction()
+    object SwapDistanceUnits : CalculatorAction()
+    data class DeleteHistoryEntry(val timestamp: Long) : CalculatorAction()
+    data class SetHistoryNote(val timestamp: Long, val note: String?) : CalculatorAction()
 }
 
 private data class BracketState(val firstOperand: Double?, val pendingOp: Char?)
@@ -232,6 +247,29 @@ class CalculatorViewModel(application: Application) : AndroidViewModel(applicati
             is CalculatorAction.SetAccentScheme -> {
                 _uiState.update { it.copy(accentScheme = action.scheme) }
                 viewModelScope.launch { repository.saveAccentScheme(action.scheme) }
+                return
+            }
+            is CalculatorAction.SetConversionMode -> {
+                _uiState.update { it.copy(conversionMode = action.mode) }
+                updateDisplay(); return
+            }
+            is CalculatorAction.SwapDistanceUnits -> {
+                val newUnit = if (_uiState.value.distanceUnit == DistanceUnit.MILES) DistanceUnit.KM else DistanceUnit.MILES
+                _uiState.update { it.copy(distanceUnit = newUnit) }
+                updateDisplay(); return
+            }
+            is CalculatorAction.DeleteHistoryEntry -> {
+                val updated = _uiState.value.history.filter { it.timestamp != action.timestamp }
+                _uiState.update { it.copy(history = updated) }
+                viewModelScope.launch { repository.saveHistory(updated) }
+                return
+            }
+            is CalculatorAction.SetHistoryNote -> {
+                val updated = _uiState.value.history.map {
+                    if (it.timestamp == action.timestamp) it.copy(note = action.note) else it
+                }
+                _uiState.update { it.copy(history = updated) }
+                viewModelScope.launch { repository.saveHistory(updated) }
                 return
             }
         }
@@ -407,14 +445,17 @@ class CalculatorViewModel(application: Application) : AndroidViewModel(applicati
 
     private fun recordHistory() {
         val state = _uiState.value
+        val isDistance = state.conversionMode == ConversionMode.DISTANCE
+        val toUnit = if (state.distanceUnit == DistanceUnit.MILES) DistanceUnit.KM else DistanceUnit.MILES
         val entry = HistoryEntry(
             display = state.display,
             expression = state.expression,
             fromAmount = state.fromAmount,
             toAmount = state.toAmount,
-            fromCurrency = state.fromCurrency,
-            toCurrency = state.toCurrency,
-            timestamp = System.currentTimeMillis()
+            fromCurrency = if (isDistance) state.distanceUnit.abbr else state.fromCurrency,
+            toCurrency = if (isDistance) toUnit.abbr else state.toCurrency,
+            timestamp = System.currentTimeMillis(),
+            conversionMode = state.conversionMode.name
         )
         val updated = (listOf(entry) + state.history).take(50)
         _uiState.update { it.copy(history = updated) }
@@ -447,7 +488,8 @@ class CalculatorViewModel(application: Application) : AndroidViewModel(applicati
             else -> ""
         }
         _uiState.update { it.copy(display = currentInput, expression = expression, isError = false) }
-        updateCurrencyDisplay()
+        if (_uiState.value.conversionMode == ConversionMode.DISTANCE) updateDistanceDisplay()
+        else updateCurrencyDisplay()
     }
 
     // Returns the effective "1 USD = X [code]" rate, preferring custom pair entries over live rates.
@@ -501,6 +543,24 @@ class CalculatorViewModel(application: Application) : AndroidViewModel(applicati
                     customRatePctDiff = null
                 )
             }
+        }
+    }
+
+    private fun updateDistanceDisplay() {
+        val value = currentInput.toDoubleOrNull() ?: 0.0
+        val unit = _uiState.value.distanceUnit
+        val (fromAbbr, toAbbr, factor) = when (unit) {
+            DistanceUnit.MILES -> Triple("mi", "km", 1.60934)
+            DistanceUnit.KM    -> Triple("km", "mi", 0.621371)
+        }
+        val converted = value * factor
+        _uiState.update {
+            it.copy(
+                fromAmount = "$fromAbbr ${"%.3f".format(value)}",
+                toAmount = "$toAbbr ${"%.3f".format(converted)}",
+                exchangeRateLabel = "1 $fromAbbr = ${"%.5f".format(factor)} $toAbbr",
+                customRatePctDiff = null
+            )
         }
     }
 }
