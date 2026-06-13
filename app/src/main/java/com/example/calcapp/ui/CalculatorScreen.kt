@@ -530,12 +530,12 @@ fun CalculatorScreen(vm: CalculatorViewModel = viewModel(), modifier: Modifier =
         ButtonGrid(
             onAction = vm::onAction,
             hapticEnabled = state.hapticEnabled,
-            modifier = Modifier.padding(start = 8.dp, top = 2.dp, end = 8.dp, bottom = 8.dp)
+            modifier = Modifier.padding(start = 8.dp, top = 2.dp, end = 8.dp, bottom = 2.dp)
         )
 
         OutlinedButton(
             onClick = { context.startActivity(Intent(Intent.ACTION_VIEW, Uri.parse("https://buymeacoffee.com/rww_100"))) },
-            modifier = Modifier.fillMaxWidth().padding(horizontal = 8.dp, vertical = 4.dp),
+            modifier = Modifier.fillMaxWidth().padding(start = 8.dp, top = 0.dp, end = 8.dp, bottom = 4.dp),
             shape = RoundedCornerShape(10.dp),
             colors = ButtonDefaults.outlinedButtonColors(contentColor = colors.promoColor),
             border = androidx.compose.foundation.BorderStroke(1.dp, colors.promoColor)
