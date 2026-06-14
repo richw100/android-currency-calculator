@@ -120,7 +120,7 @@ fun AppScreen() {
                     }
                     Spacer(modifier = Modifier.width(10.dp))
                     Text(
-                        text = "TripCalc",
+                        text = "Currency & Holiday Calculator",
                         color = colors.textPrimary,
                         fontSize = 18.sp,
                         fontWeight = FontWeight.SemiBold
