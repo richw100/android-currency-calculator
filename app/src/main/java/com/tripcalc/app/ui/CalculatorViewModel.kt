@@ -85,7 +85,7 @@ data class CalculatorUiState(
     val tipPeopleCount: Int = 1,
     val fuelInputIsMpg: Boolean = true,
     val fuelUseUkGallons: Boolean = true,
-    val swapZeroDot: Boolean = false,
+    val swapZeroDot: Boolean = true,
     val enabledModes: Set<ConversionMode> = ConversionMode.entries.toSet()
 )
 

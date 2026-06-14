@@ -181,7 +181,7 @@ class ExchangeRateRepository(private val context: Context) {
     }
 
     suspend fun loadSwapZeroDot(): Boolean =
-        context.dataStore.data.first()[swapZeroDotKey] ?: false
+        context.dataStore.data.first()[swapZeroDotKey] ?: true
 
     private val enabledModesKey = stringSetPreferencesKey("enabled_modes")
 

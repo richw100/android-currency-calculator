@@ -231,7 +231,7 @@ fun SettingsScreen(vm: CalculatorViewModel, modifier: Modifier = Modifier) {
             ) {
                 Column(modifier = Modifier.weight(1f)) {
                     Text("Swap 0 and . keys", color = colors.textPrimary, fontSize = 15.sp)
-                    Text("Put decimal point before zero in bottom row", color = colors.textSecondary, fontSize = 12.sp)
+                    Text("Put zero before decimal point in bottom row", color = colors.textSecondary, fontSize = 12.sp)
                 }
                 Switch(
                     checked = state.swapZeroDot,
