@@ -106,6 +106,7 @@ sealed class CalculatorAction {
     object SwapFuelDirection : CalculatorAction()
     data class SetFuelUseUkGallons(val useUk: Boolean) : CalculatorAction()
     data class SetDefaultTipPercent(val percent: Double) : CalculatorAction()
+    object SendTipShareToFX : CalculatorAction()
 }
 
 private data class BracketState(val firstOperand: Double?, val pendingOp: Char?)
@@ -121,6 +122,7 @@ class CalculatorViewModel(application: Application) : AndroidViewModel(applicati
     private var pendingOp: Char? = null
     private var justCalculated = false
     private var shouldResetInput = false
+    private var tipSavedBill: String? = null
 
     // Each ( pushes the current (firstOperand, pendingOp) so ) can restore it
     private val bracketStack = mutableListOf<BracketState>()
@@ -273,6 +275,12 @@ class CalculatorViewModel(application: Application) : AndroidViewModel(applicati
                 return
             }
             is CalculatorAction.SetConversionMode -> {
+                if (action.mode == ConversionMode.TIP && tipSavedBill != null) {
+                    currentInput = tipSavedBill!!
+                    firstOperand = null; pendingOp = null
+                    bracketStack.clear(); expressionDisplay.clear()
+                    justCalculated = true; shouldResetInput = false
+                }
                 _uiState.update { it.copy(conversionMode = action.mode) }
                 updateDisplay(); return
             }
@@ -327,11 +335,25 @@ class CalculatorViewModel(application: Application) : AndroidViewModel(applicati
                 viewModelScope.launch { repository.saveHistory(updated) }
                 return
             }
+            is CalculatorAction.SendTipShareToFX -> {
+                val s = _uiState.value
+                tipSavedBill = currentInput
+                val bill = currentInput.toDoubleOrNull() ?: 0.0
+                val total = bill * (1.0 + s.tipPercent / 100.0)
+                val amount = if (s.tipPeopleCount > 1) total / s.tipPeopleCount else total
+                currentInput = formatResult(amount)
+                firstOperand = null; pendingOp = null
+                bracketStack.clear(); expressionDisplay.clear()
+                justCalculated = true; shouldResetInput = false
+                _uiState.update { it.copy(isError = false, conversionMode = ConversionMode.CURRENCY) }
+                updateDisplay(); return
+            }
         }
         updateDisplay()
     }
 
     private fun handleDigit(digit: Int) {
+        if (_uiState.value.conversionMode == ConversionMode.TIP) tipSavedBill = null
         if (justCalculated || shouldResetInput) {
             if (justCalculated) {
                 firstOperand = null; pendingOp = null
@@ -347,6 +369,7 @@ class CalculatorViewModel(application: Application) : AndroidViewModel(applicati
     }
 
     private fun handleDecimal() {
+        if (_uiState.value.conversionMode == ConversionMode.TIP) tipSavedBill = null
         if (justCalculated || shouldResetInput) {
             if (justCalculated) {
                 firstOperand = null; pendingOp = null
@@ -364,6 +387,7 @@ class CalculatorViewModel(application: Application) : AndroidViewModel(applicati
         firstOperand = null; pendingOp = null
         justCalculated = false; shouldResetInput = false
         bracketStack.clear(); expressionDisplay.clear()
+        tipSavedBill = null
         _uiState.update { it.copy(isError = false) }
     }
 

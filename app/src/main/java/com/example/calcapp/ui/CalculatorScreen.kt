@@ -120,7 +120,7 @@ fun AppScreen() {
                     }
                     Spacer(modifier = Modifier.width(10.dp))
                     Text(
-                        text = "Currency Calculator",
+                        text = "TripCalc",
                         color = colors.textPrimary,
                         fontSize = 18.sp,
                         fontWeight = FontWeight.SemiBold
@@ -204,7 +204,7 @@ fun AboutScreen(modifier: Modifier = Modifier) {
 
         Spacer(Modifier.height(20.dp))
 
-        Text(text = "Currency Calc", color = colors.textPrimary, fontSize = 26.sp, fontWeight = FontWeight.Bold)
+        Text(text = "TripCalc", color = colors.textPrimary, fontSize = 26.sp, fontWeight = FontWeight.Bold)
         Text(text = "Version 1.0", color = colors.textSecondary, fontSize = 13.sp)
 
         Spacer(Modifier.height(32.dp))
@@ -479,7 +479,8 @@ fun CalculatorScreen(vm: CalculatorViewModel = viewModel(), modifier: Modifier =
                 TipBreakdownDisplay(
                     bill = state.display.toDoubleOrNull() ?: 0.0,
                     tipPercent = state.tipPercent,
-                    people = state.tipPeopleCount
+                    people = state.tipPeopleCount,
+                    onConvertToFX = { vm.onAction(CalculatorAction.SendTipShareToFX) }
                 )
             } else {
                 val shareText = if (state.conversionMode == ConversionMode.CURRENCY)
@@ -939,7 +940,7 @@ private fun CustomTipPercentDialog(current: Double, onSave: (Double) -> Unit, on
 // ── Tip breakdown display ─────────────────────────────────────────────────────
 
 @Composable
-private fun TipBreakdownDisplay(bill: Double, tipPercent: Double, people: Int) {
+private fun TipBreakdownDisplay(bill: Double, tipPercent: Double, people: Int, onConvertToFX: (() -> Unit)? = null) {
     val colors = LocalAppColors.current
     val tipAmount = bill * tipPercent / 100.0
     val total = bill + tipAmount
@@ -956,7 +957,27 @@ private fun TipBreakdownDisplay(bill: Double, tipPercent: Double, people: Int) {
         horizontalAlignment = Alignment.End
     ) {
         CopyableAmount(text = "Tip ($pctLabel%):  ${"%.2f".format(tipAmount)}", color = colors.textSecondary, shareText = shareText)
-        CopyableAmount(text = "Total:  ${"%.2f".format(total)}", color = colors.fromAmountColor, shareText = shareText)
+        if (onConvertToFX != null && bill > 0) {
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.SpaceBetween
+            ) {
+                TextButton(
+                    onClick = onConvertToFX,
+                    contentPadding = PaddingValues(horizontal = 4.dp, vertical = 0.dp)
+                ) {
+                    Text(
+                        text = if (people > 1) "💱 Convert my share" else "💱 Convert to FX",
+                        fontSize = 12.sp,
+                        color = colors.operator
+                    )
+                }
+                CopyableAmount(text = "Total:  ${"%.2f".format(total)}", color = colors.fromAmountColor, shareText = shareText)
+            }
+        } else {
+            CopyableAmount(text = "Total:  ${"%.2f".format(total)}", color = colors.fromAmountColor, shareText = shareText)
+        }
         if (perPerson != null) {
             CopyableAmount(text = "Each:  ${"%.2f".format(perPerson)}", color = colors.toAmountColor, shareText = shareText)
         }

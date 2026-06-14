@@ -1,31 +1,33 @@
-Currency Calc — the calculator that converts as you type.
+TripCalc — the calculator built for travel.
 
-Most currency apps make you switch between a calculator and a converter. Currency Calc combines both in one place. Enter any amount — or a full calculation — and see the live converted equivalent update in real time alongside your working.
+Everything you need when you're abroad, in one place. Convert currencies as you type, split a restaurant bill, convert miles to kilometres, Fahrenheit to Celsius, and check your fuel economy — all without leaving the app.
 
 
-LIVE EXCHANGE RATES
+CURRENCY CONVERSION
 
-Rates are fetched automatically from open.er-api.com, covering 161 currencies worldwide. Rates refresh every 24 hours and are cached so the app keeps working even when you're offline.
+Rates are fetched automatically from open.er-api.com, covering 161 currencies worldwide. Rates refresh every 24 hours and are cached so the app keeps working even when you're offline. Set a custom rate if you've already locked in your exchange rate from a bank or travel money provider — the app shows exactly how it compares to the live rate.
+
+
+TIP & BILL SPLITTING
+
+Enter the bill, choose your tip percentage (or set a custom one), and split it however many ways you need. One tap sends your share straight to the currency converter — so you always know what you're paying in your home currency.
+
+
+UNIT CONVERSIONS
+
+• Miles ↔ Kilometres
+• Celsius ↔ Fahrenheit
+• MPG (UK or US) ↔ Litres per 100km
 
 
 FULL CALCULATOR
 
-All the standard operations you'd expect — add, subtract, multiply, divide — plus brackets for complex expressions and a percentage key. A scrollable history of recent calculations lets you tap any result to restore it instantly.
-
-
-CUSTOM RATES
-
-Travelling soon, or already have a locked-in rate from your bank or travel money provider? Set your own exchange rate for any currency pair. The app shows exactly how your custom rate compares to the live rate, so you always know what you're getting.
-
-
-161 CURRENCIES
-
-From major pairs like GBP/EUR and USD/JPY to lesser-known currencies. Search by name or code, and your recently used currencies appear at the top for quick access.
+All the standard operations — add, subtract, multiply, divide — plus brackets for complex expressions and a percentage key. A scrollable history of recent calculations lets you tap any result to restore it instantly.
 
 
 CUSTOMISABLE APPEARANCE
 
-Choose from five accent colour schemes for the calculator buttons. Switch between dark mode, light mode, or follow your device's system setting. All preferences are saved and restored between sessions.
+Choose from five accent colour schemes. Switch between dark mode, light mode, or follow your device's system setting.
 
 
 NO ADS, EVER
@@ -36,6 +38,8 @@ Clean, distraction-free interface. No banner ads, no pop-ups, no subscriptions. 
 FEATURES AT A GLANCE
 
 • Live rates for 161 currencies, refreshed every 24 hours
+• Tip calculator with bill splitting and FX hand-off
+• Miles ↔ km, °C ↔ °F, MPG ↔ L/100km
 • Full calculator with brackets and percentage
 • Calculation history — tap any entry to restore it
 • Custom exchange rates with live rate comparison
@@ -43,5 +47,4 @@ FEATURES AT A GLANCE
 • Five accent colour themes
 • Haptic feedback (optional)
 • Copy or share any calculated amount
-• Paste numbers directly into the display
 • Works offline using cached rates
