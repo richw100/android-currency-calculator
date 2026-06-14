@@ -123,12 +123,14 @@ private fun HistoryEntryCard(
             }
             Text(text = entry.display, color = colors.textPrimary, fontSize = 28.sp, fontWeight = FontWeight.Light)
             Spacer(Modifier.height(4.dp))
-            val isDistance = entry.conversionMode == "DISTANCE"
             Text(
-                text = if (isDistance)
-                    "📏 ${entry.fromAmount}  →  ${entry.toAmount}"
-                else
-                    "${currencyFlag(entry.fromCurrency)} ${entry.fromAmount}  →  ${currencyFlag(entry.toCurrency)} ${entry.toAmount}",
+                text = when (entry.conversionMode) {
+                    "DISTANCE"    -> "📏 ${entry.fromAmount}  →  ${entry.toAmount}"
+                    "TEMPERATURE" -> "🌡 ${entry.fromAmount}  →  ${entry.toAmount}"
+                    "TIP"         -> "🍽 ${entry.fromAmount}  ·  ${entry.toAmount}"
+                    "FUEL"        -> "⛽ ${entry.fromAmount}  →  ${entry.toAmount}"
+                    else          -> "${currencyFlag(entry.fromCurrency)} ${entry.fromAmount}  →  ${currencyFlag(entry.toCurrency)} ${entry.toAmount}"
+                },
                 color = colors.textSecondary,
                 fontSize = 13.sp
             )

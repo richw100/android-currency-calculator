@@ -1,6 +1,7 @@
 package com.example.calcapp.ui
 
 import androidx.compose.foundation.BorderStroke
+import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
@@ -136,6 +137,45 @@ fun SettingsScreen(vm: CalculatorViewModel, modifier: Modifier = Modifier) {
                     checked = state.hapticEnabled,
                     onCheckedChange = { vm.onAction(CalculatorAction.SetHaptic(it)) },
                     colors = SwitchDefaults.colors(checkedThumbColor = Color.White, checkedTrackColor = colors.positiveColor)
+                )
+            }
+
+            HorizontalDivider(modifier = Modifier.padding(horizontal = 16.dp), color = colors.divider)
+
+            Column(modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 12.dp)) {
+                Text("Default tip %", color = colors.textPrimary, fontSize = 15.sp)
+                Text("Applied when you open the Tip calculator", color = colors.textSecondary, fontSize = 12.sp)
+                Spacer(Modifier.height(10.dp))
+                Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                    listOf(10.0, 15.0, 20.0).forEach { pct ->
+                        FilterChip(
+                            selected = state.defaultTipPercent == pct,
+                            onClick = { vm.onAction(CalculatorAction.SetDefaultTipPercent(pct)) },
+                            label = { Text("${pct.toInt()}%", fontSize = 13.sp) },
+                            modifier = Modifier.weight(1f),
+                            colors = FilterChipDefaults.filterChipColors(
+                                selectedContainerColor = colors.positiveColor,
+                                selectedLabelColor = androidx.compose.ui.graphics.Color.White
+                            )
+                        )
+                    }
+                }
+            }
+
+            HorizontalDivider(modifier = Modifier.padding(horizontal = 16.dp), color = colors.divider)
+
+            Row(
+                modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 12.dp),
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Column(modifier = Modifier.weight(1f)) {
+                    Text("Fuel economy — UK gallons", color = colors.textPrimary, fontSize = 15.sp)
+                    Text("Use Imperial (UK) gallons for mpg", color = colors.textSecondary, fontSize = 12.sp)
+                }
+                Switch(
+                    checked = state.fuelUseUkGallons,
+                    onCheckedChange = { vm.onAction(CalculatorAction.SetFuelUseUkGallons(it)) },
+                    colors = SwitchDefaults.colors(checkedThumbColor = androidx.compose.ui.graphics.Color.White, checkedTrackColor = colors.positiveColor)
                 )
             }
 

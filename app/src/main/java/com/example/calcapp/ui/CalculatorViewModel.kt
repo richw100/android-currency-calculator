@@ -13,12 +13,18 @@ import java.util.Currency as JavaCurrency
 import kotlin.math.abs
 import kotlin.math.floor
 
-enum class ConversionMode { CURRENCY, DISTANCE }
+enum class ConversionMode { CURRENCY, DISTANCE, TEMPERATURE, TIP, FUEL }
 
 enum class DistanceUnit(val label: String, val abbr: String) {
     MILES("Miles", "mi"),
     KM("Kilometres", "km")
 }
+
+enum class TempUnit(val label: String, val abbr: String) {
+    CELSIUS("Celsius", "°C"),
+    FAHRENHEIT("Fahrenheit", "°F")
+}
+
 
 data class CustomRateEntry(val base: String, val rate: Double)
 
@@ -56,7 +62,13 @@ data class CalculatorUiState(
     val darkModePref: DarkModePref = DarkModePref.SYSTEM,
     val accentScheme: AccentScheme = AccentScheme.TEAL_GREEN,
     val conversionMode: ConversionMode = ConversionMode.CURRENCY,
-    val distanceUnit: DistanceUnit = DistanceUnit.MILES
+    val distanceUnit: DistanceUnit = DistanceUnit.MILES,
+    val tempUnit: TempUnit = TempUnit.CELSIUS,
+    val defaultTipPercent: Double = 10.0,
+    val tipPercent: Double = 10.0,
+    val tipPeopleCount: Int = 1,
+    val fuelInputIsMpg: Boolean = true,
+    val fuelUseUkGallons: Boolean = true
 )
 
 sealed class CalculatorAction {
@@ -86,6 +98,12 @@ sealed class CalculatorAction {
     object SwapDistanceUnits : CalculatorAction()
     data class DeleteHistoryEntry(val timestamp: Long) : CalculatorAction()
     data class SetHistoryNote(val timestamp: Long, val note: String?) : CalculatorAction()
+    object SwapTempUnits : CalculatorAction()
+    data class SetTipPercent(val percent: Double) : CalculatorAction()
+    data class SetTipPeople(val count: Int) : CalculatorAction()
+    object SwapFuelDirection : CalculatorAction()
+    data class SetFuelUseUkGallons(val useUk: Boolean) : CalculatorAction()
+    data class SetDefaultTipPercent(val percent: Double) : CalculatorAction()
 }
 
 private data class BracketState(val firstOperand: Double?, val pendingOp: Char?)
@@ -119,7 +137,9 @@ class CalculatorViewModel(application: Application) : AndroidViewModel(applicati
             val history = repository.loadHistory()
             val darkModePref = repository.loadDarkModePref()
             val accentScheme = repository.loadAccentScheme()
-            _uiState.update { it.copy(toCurrency = to, fromCurrency = from, recentCurrencies = recents, customRates = customRates, hapticEnabled = hapticEnabled, history = history, darkModePref = darkModePref, accentScheme = accentScheme) }
+            val defaultTipPercent = repository.loadDefaultTipPercent()
+            val fuelUseUkGallons = repository.loadFuelUseUkGallons()
+            _uiState.update { it.copy(toCurrency = to, fromCurrency = from, recentCurrencies = recents, customRates = customRates, hapticEnabled = hapticEnabled, history = history, darkModePref = darkModePref, accentScheme = accentScheme, defaultTipPercent = defaultTipPercent, tipPercent = defaultTipPercent, fuelUseUkGallons = fuelUseUkGallons) }
             fetchRates(forceRefresh = false)
         }
     }
@@ -256,6 +276,33 @@ class CalculatorViewModel(application: Application) : AndroidViewModel(applicati
             is CalculatorAction.SwapDistanceUnits -> {
                 val newUnit = if (_uiState.value.distanceUnit == DistanceUnit.MILES) DistanceUnit.KM else DistanceUnit.MILES
                 _uiState.update { it.copy(distanceUnit = newUnit) }
+                updateDisplay(); return
+            }
+            is CalculatorAction.SwapTempUnits -> {
+                val newUnit = if (_uiState.value.tempUnit == TempUnit.CELSIUS) TempUnit.FAHRENHEIT else TempUnit.CELSIUS
+                _uiState.update { it.copy(tempUnit = newUnit) }
+                updateDisplay(); return
+            }
+            is CalculatorAction.SetTipPercent -> {
+                _uiState.update { it.copy(tipPercent = action.percent) }
+                updateDisplay(); return
+            }
+            is CalculatorAction.SetTipPeople -> {
+                _uiState.update { it.copy(tipPeopleCount = action.count.coerceIn(1, 20)) }
+                updateDisplay(); return
+            }
+            is CalculatorAction.SwapFuelDirection -> {
+                _uiState.update { it.copy(fuelInputIsMpg = !it.fuelInputIsMpg) }
+                updateDisplay(); return
+            }
+            is CalculatorAction.SetFuelUseUkGallons -> {
+                _uiState.update { it.copy(fuelUseUkGallons = action.useUk) }
+                viewModelScope.launch { repository.saveFuelUseUkGallons(action.useUk) }
+                updateDisplay(); return
+            }
+            is CalculatorAction.SetDefaultTipPercent -> {
+                _uiState.update { it.copy(defaultTipPercent = action.percent, tipPercent = action.percent) }
+                viewModelScope.launch { repository.saveDefaultTipPercent(action.percent) }
                 updateDisplay(); return
             }
             is CalculatorAction.DeleteHistoryEntry -> {
@@ -445,15 +492,29 @@ class CalculatorViewModel(application: Application) : AndroidViewModel(applicati
 
     private fun recordHistory() {
         val state = _uiState.value
-        val isDistance = state.conversionMode == ConversionMode.DISTANCE
-        val toUnit = if (state.distanceUnit == DistanceUnit.MILES) DistanceUnit.KM else DistanceUnit.MILES
+        val toDistUnit = if (state.distanceUnit == DistanceUnit.MILES) DistanceUnit.KM else DistanceUnit.MILES
+        val toTempUnit = if (state.tempUnit == TempUnit.CELSIUS) TempUnit.FAHRENHEIT else TempUnit.CELSIUS
+        val pctLabel = if (state.tipPercent == state.tipPercent.toLong().toDouble())
+            state.tipPercent.toLong().toString() else "%.1f".format(state.tipPercent)
         val entry = HistoryEntry(
             display = state.display,
             expression = state.expression,
             fromAmount = state.fromAmount,
             toAmount = state.toAmount,
-            fromCurrency = if (isDistance) state.distanceUnit.abbr else state.fromCurrency,
-            toCurrency = if (isDistance) toUnit.abbr else state.toCurrency,
+            fromCurrency = when (state.conversionMode) {
+                ConversionMode.DISTANCE -> state.distanceUnit.abbr
+                ConversionMode.TEMPERATURE -> state.tempUnit.abbr
+                ConversionMode.TIP -> "$pctLabel%"
+                ConversionMode.FUEL -> if (state.fuelInputIsMpg) (if (state.fuelUseUkGallons) "mpg (UK)" else "mpg (US)") else "L/100km"
+                ConversionMode.CURRENCY -> state.fromCurrency
+            },
+            toCurrency = when (state.conversionMode) {
+                ConversionMode.DISTANCE -> toDistUnit.abbr
+                ConversionMode.TEMPERATURE -> toTempUnit.abbr
+                ConversionMode.TIP -> "${state.tipPeopleCount}p"
+                ConversionMode.FUEL -> if (state.fuelInputIsMpg) "L/100km" else (if (state.fuelUseUkGallons) "mpg (UK)" else "mpg (US)")
+                ConversionMode.CURRENCY -> state.toCurrency
+            },
             timestamp = System.currentTimeMillis(),
             conversionMode = state.conversionMode.name
         )
@@ -488,8 +549,13 @@ class CalculatorViewModel(application: Application) : AndroidViewModel(applicati
             else -> ""
         }
         _uiState.update { it.copy(display = currentInput, expression = expression, isError = false) }
-        if (_uiState.value.conversionMode == ConversionMode.DISTANCE) updateDistanceDisplay()
-        else updateCurrencyDisplay()
+        when (_uiState.value.conversionMode) {
+            ConversionMode.DISTANCE -> updateDistanceDisplay()
+            ConversionMode.TEMPERATURE -> updateTempDisplay()
+            ConversionMode.TIP -> updateTipDisplay()
+            ConversionMode.FUEL -> updateFuelDisplay()
+            ConversionMode.CURRENCY -> updateCurrencyDisplay()
+        }
     }
 
     // Returns the effective "1 USD = X [code]" rate, preferring custom pair entries over live rates.
@@ -559,6 +625,60 @@ class CalculatorViewModel(application: Application) : AndroidViewModel(applicati
                 fromAmount = "$fromAbbr ${"%.3f".format(value)}",
                 toAmount = "$toAbbr ${"%.3f".format(converted)}",
                 exchangeRateLabel = "1 $fromAbbr = ${"%.5f".format(factor)} $toAbbr",
+                customRatePctDiff = null
+            )
+        }
+    }
+
+    private fun updateTempDisplay() {
+        val value = currentInput.toDoubleOrNull() ?: 0.0
+        val unit = _uiState.value.tempUnit
+        val (fromAbbr, toAbbr, converted) = when (unit) {
+            TempUnit.CELSIUS    -> Triple("°C", "°F", value * 9.0 / 5.0 + 32.0)
+            TempUnit.FAHRENHEIT -> Triple("°F", "°C", (value - 32.0) * 5.0 / 9.0)
+        }
+        _uiState.update {
+            it.copy(
+                fromAmount = "$fromAbbr ${"%.2f".format(value)}",
+                toAmount = "$toAbbr ${"%.2f".format(converted)}",
+                exchangeRateLabel = "$fromAbbr  ⇄  $toAbbr",
+                customRatePctDiff = null
+            )
+        }
+    }
+
+    private fun updateTipDisplay() {
+        val bill = currentInput.toDoubleOrNull() ?: 0.0
+        val state = _uiState.value
+        val tipAmount = bill * state.tipPercent / 100.0
+        val total = bill + tipAmount
+        val pctLabel = if (state.tipPercent == state.tipPercent.toLong().toDouble())
+            state.tipPercent.toLong().toString() else "%.1f".format(state.tipPercent)
+        _uiState.update {
+            it.copy(
+                fromAmount = "Tip ${"%.2f".format(tipAmount)}",
+                toAmount = "Total ${"%.2f".format(total)}",
+                exchangeRateLabel = "$pctLabel% tip · ${state.tipPeopleCount} ${if (state.tipPeopleCount == 1) "person" else "people"}",
+                customRatePctDiff = null
+            )
+        }
+    }
+
+    private fun updateFuelDisplay() {
+        val value = currentInput.toDoubleOrNull() ?: 0.0
+        val state = _uiState.value
+        val factor = if (state.fuelUseUkGallons) 282.481 else 235.214
+        val mpgLabel = if (state.fuelUseUkGallons) "mpg (UK)" else "mpg (US)"
+        val (fromAbbr, toAbbr) = if (state.fuelInputIsMpg)
+            Pair(mpgLabel, "L/100km") else Pair("L/100km", mpgLabel)
+        val converted = if (value > 0) factor / value else 0.0
+        val rateLabel = if (state.fuelInputIsMpg)
+            "${factor.toInt()} ÷ mpg = L/100km" else "${factor.toInt()} ÷ L/100km = $mpgLabel"
+        _uiState.update {
+            it.copy(
+                fromAmount = "$fromAbbr ${"%.2f".format(value)}",
+                toAmount = "$toAbbr ${"%.2f".format(converted)}",
+                exchangeRateLabel = rateLabel,
                 customRatePctDiff = null
             )
         }

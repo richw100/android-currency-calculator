@@ -143,4 +143,22 @@ class ExchangeRateRepository(private val context: Context) {
         val name = context.dataStore.data.first()[accentSchemeKey] ?: return AccentScheme.TEAL_GREEN
         return try { AccentScheme.valueOf(name) } catch (e: Exception) { AccentScheme.TEAL_GREEN }
     }
+
+    private val defaultTipPercentKey = stringPreferencesKey("default_tip_percent")
+
+    suspend fun saveDefaultTipPercent(percent: Double) {
+        context.dataStore.edit { it[defaultTipPercentKey] = percent.toString() }
+    }
+
+    suspend fun loadDefaultTipPercent(): Double =
+        context.dataStore.data.first()[defaultTipPercentKey]?.toDoubleOrNull() ?: 10.0
+
+    private val fuelUseUkGallonsKey = booleanPreferencesKey("fuel_use_uk_gallons")
+
+    suspend fun saveFuelUseUkGallons(useUk: Boolean) {
+        context.dataStore.edit { it[fuelUseUkGallonsKey] = useUk }
+    }
+
+    suspend fun loadFuelUseUkGallons(): Boolean =
+        context.dataStore.data.first()[fuelUseUkGallonsKey] ?: true
 }

@@ -316,16 +316,32 @@ fun CalculatorScreen(vm: CalculatorViewModel = viewModel(), modifier: Modifier =
             SegmentedButton(
                 selected = state.conversionMode == ConversionMode.CURRENCY,
                 onClick = { vm.onAction(CalculatorAction.SetConversionMode(ConversionMode.CURRENCY)) },
-                shape = SegmentedButtonDefaults.itemShape(index = 0, count = 2)
-            ) { Text("💱  Currency", fontSize = 12.sp) }
+                shape = SegmentedButtonDefaults.itemShape(index = 0, count = 5)
+            ) { Text("💱 FX", fontSize = 11.sp) }
             SegmentedButton(
                 selected = state.conversionMode == ConversionMode.DISTANCE,
                 onClick = { vm.onAction(CalculatorAction.SetConversionMode(ConversionMode.DISTANCE)) },
-                shape = SegmentedButtonDefaults.itemShape(index = 1, count = 2)
-            ) { Text("📏  Distance", fontSize = 12.sp) }
+                shape = SegmentedButtonDefaults.itemShape(index = 1, count = 5)
+            ) { Text("📏 Dist", fontSize = 11.sp) }
+            SegmentedButton(
+                selected = state.conversionMode == ConversionMode.TEMPERATURE,
+                onClick = { vm.onAction(CalculatorAction.SetConversionMode(ConversionMode.TEMPERATURE)) },
+                shape = SegmentedButtonDefaults.itemShape(index = 2, count = 5)
+            ) { Text("🌡 Temp", fontSize = 11.sp) }
+            SegmentedButton(
+                selected = state.conversionMode == ConversionMode.TIP,
+                onClick = { vm.onAction(CalculatorAction.SetConversionMode(ConversionMode.TIP)) },
+                shape = SegmentedButtonDefaults.itemShape(index = 3, count = 5)
+            ) { Text("🍽 Tip", fontSize = 11.sp) }
+            SegmentedButton(
+                selected = state.conversionMode == ConversionMode.FUEL,
+                onClick = { vm.onAction(CalculatorAction.SetConversionMode(ConversionMode.FUEL)) },
+                shape = SegmentedButtonDefaults.itemShape(index = 4, count = 5)
+            ) { Text("⛽ mpg", fontSize = 11.sp) }
         }
 
-        if (state.conversionMode == ConversionMode.CURRENCY) {
+        when (state.conversionMode) {
+        ConversionMode.CURRENCY -> {
             // Currency selectors + inline refresh
             Row(
                 modifier = Modifier
@@ -429,30 +445,54 @@ fun CalculatorScreen(vm: CalculatorViewModel = viewModel(), modifier: Modifier =
                     }
                 }
             }
-        } else {
-            // Distance unit row
-            DistanceConversionRow(
-                unit = state.distanceUnit,
-                rateLabel = state.exchangeRateLabel,
-                onSwap = { vm.onAction(CalculatorAction.SwapDistanceUnits) }
-            )
+        }
+        ConversionMode.DISTANCE -> DistanceConversionRow(
+            unit = state.distanceUnit,
+            rateLabel = state.exchangeRateLabel,
+            onSwap = { vm.onAction(CalculatorAction.SwapDistanceUnits) }
+        )
+        ConversionMode.TEMPERATURE -> TempConversionRow(
+            unit = state.tempUnit,
+            rateLabel = state.exchangeRateLabel,
+            onSwap = { vm.onAction(CalculatorAction.SwapTempUnits) }
+        )
+        ConversionMode.TIP -> TipControlsRow(
+            tipPercent = state.tipPercent,
+            people = state.tipPeopleCount,
+            onSetPercent = { vm.onAction(CalculatorAction.SetTipPercent(it)) },
+            onSetPeople = { vm.onAction(CalculatorAction.SetTipPeople(it)) }
+        )
+        ConversionMode.FUEL -> FuelConversionRow(
+            inputIsMpg = state.fuelInputIsMpg,
+            useUkGallons = state.fuelUseUkGallons,
+            rateLabel = state.exchangeRateLabel,
+            onSwap = { vm.onAction(CalculatorAction.SwapFuelDirection) }
+        )
         }
 
             // Conversion display
-            val shareText = if (state.conversionMode == ConversionMode.CURRENCY)
-                "${currencyFlag(state.fromCurrency)} ${state.fromAmount} = ${currencyFlag(state.toCurrency)} ${state.toAmount}"
-            else
-                "${state.fromAmount} = ${state.toAmount}"
-            Column(
-                modifier = Modifier.fillMaxWidth().padding(horizontal = 20.dp, vertical = 4.dp),
-                horizontalAlignment = Alignment.End
-            ) {
-                if (state.conversionMode == ConversionMode.CURRENCY) {
-                    CopyableAmount(text = "${currencyFlag(state.fromCurrency)} ${state.fromAmount}", color = colors.fromAmountColor, shareText = shareText)
-                    CopyableAmount(text = "${currencyFlag(state.toCurrency)} ${state.toAmount}", color = colors.toAmountColor, shareText = shareText)
-                } else {
-                    CopyableAmount(text = state.fromAmount, color = colors.fromAmountColor, shareText = shareText)
-                    CopyableAmount(text = state.toAmount, color = colors.toAmountColor, shareText = shareText)
+            if (state.conversionMode == ConversionMode.TIP) {
+                TipBreakdownDisplay(
+                    bill = state.display.toDoubleOrNull() ?: 0.0,
+                    tipPercent = state.tipPercent,
+                    people = state.tipPeopleCount
+                )
+            } else {
+                val shareText = if (state.conversionMode == ConversionMode.CURRENCY)
+                    "${currencyFlag(state.fromCurrency)} ${state.fromAmount} = ${currencyFlag(state.toCurrency)} ${state.toAmount}"
+                else
+                    "${state.fromAmount} = ${state.toAmount}"
+                Column(
+                    modifier = Modifier.fillMaxWidth().padding(horizontal = 20.dp, vertical = 4.dp),
+                    horizontalAlignment = Alignment.End
+                ) {
+                    if (state.conversionMode == ConversionMode.CURRENCY) {
+                        CopyableAmount(text = "${currencyFlag(state.fromCurrency)} ${state.fromAmount}", color = colors.fromAmountColor, shareText = shareText)
+                        CopyableAmount(text = "${currencyFlag(state.toCurrency)} ${state.toAmount}", color = colors.toAmountColor, shareText = shareText)
+                    } else {
+                        CopyableAmount(text = state.fromAmount, color = colors.fromAmountColor, shareText = shareText)
+                        CopyableAmount(text = state.toAmount, color = colors.toAmountColor, shareText = shareText)
+                    }
                 }
             }
 
@@ -701,6 +741,182 @@ private fun DistanceConversionRow(
                 fontSize = 11.sp,
                 modifier = Modifier.padding(horizontal = 16.dp, vertical = 2.dp)
             )
+        }
+    }
+}
+
+// ── Temperature conversion row ────────────────────────────────────────────────
+
+@Composable
+private fun TempConversionRow(unit: TempUnit, rateLabel: String, onSwap: () -> Unit) {
+    val colors = LocalAppColors.current
+    val toUnit = if (unit == TempUnit.CELSIUS) TempUnit.FAHRENHEIT else TempUnit.CELSIUS
+    Column(modifier = Modifier.fillMaxWidth()) {
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(horizontal = 12.dp, vertical = 4.dp),
+            horizontalArrangement = Arrangement.spacedBy(8.dp),
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            androidx.compose.foundation.layout.Box(
+                modifier = Modifier
+                    .weight(1f)
+                    .border(1.dp, colors.inputBorder, RoundedCornerShape(8.dp))
+                    .padding(horizontal = 12.dp, vertical = 10.dp)
+            ) {
+                Text("From: ${unit.label} (${unit.abbr})", color = colors.textPrimary, fontSize = 13.sp, maxLines = 1)
+            }
+            IconButton(onClick = onSwap) {
+                Icon(Icons.Default.SwapHoriz, contentDescription = "Swap units", tint = colors.textSecondary)
+            }
+            androidx.compose.foundation.layout.Box(
+                modifier = Modifier
+                    .weight(1f)
+                    .border(1.dp, colors.inputBorder, RoundedCornerShape(8.dp))
+                    .padding(horizontal = 12.dp, vertical = 10.dp)
+            ) {
+                Text("To: ${toUnit.label} (${toUnit.abbr})", color = colors.textPrimary, fontSize = 13.sp, maxLines = 1)
+            }
+        }
+        if (rateLabel.isNotEmpty()) {
+            Text(rateLabel, color = colors.textSecondary, fontSize = 11.sp,
+                modifier = Modifier.padding(horizontal = 16.dp, vertical = 2.dp))
+        }
+    }
+}
+
+// ── Tip controls row ──────────────────────────────────────────────────────────
+
+@Composable
+private fun TipControlsRow(
+    tipPercent: Double,
+    people: Int,
+    onSetPercent: (Double) -> Unit,
+    onSetPeople: (Int) -> Unit
+) {
+    val colors = LocalAppColors.current
+    Column(
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(horizontal = 12.dp, vertical = 4.dp),
+        verticalArrangement = Arrangement.spacedBy(6.dp)
+    ) {
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.spacedBy(8.dp),
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            Text("Tip", color = colors.textSecondary, fontSize = 13.sp, modifier = Modifier.width(36.dp))
+            listOf(10.0, 15.0, 20.0).forEach { pct ->
+                FilterChip(
+                    selected = tipPercent == pct,
+                    onClick = { onSetPercent(pct) },
+                    label = { Text("${pct.toInt()}%", fontSize = 13.sp) },
+                    modifier = Modifier.weight(1f),
+                    colors = FilterChipDefaults.filterChipColors(
+                        selectedContainerColor = colors.operator,
+                        selectedLabelColor = colors.operatorContent
+                    )
+                )
+            }
+        }
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.spacedBy(8.dp),
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            Text("Split", color = colors.textSecondary, fontSize = 13.sp, modifier = Modifier.width(36.dp))
+            OutlinedButton(
+                onClick = { onSetPeople(people - 1) },
+                enabled = people > 1,
+                modifier = Modifier.size(36.dp),
+                contentPadding = PaddingValues(0.dp),
+                shape = CircleShape
+            ) { Text("−", fontSize = 18.sp) }
+            Text(
+                text = if (people == 1) "Just me" else "$people people",
+                color = colors.textPrimary,
+                fontSize = 14.sp,
+                modifier = Modifier.weight(1f),
+                textAlign = TextAlign.Center
+            )
+            OutlinedButton(
+                onClick = { onSetPeople(people + 1) },
+                enabled = people < 20,
+                modifier = Modifier.size(36.dp),
+                contentPadding = PaddingValues(0.dp),
+                shape = CircleShape
+            ) { Text("+", fontSize = 18.sp) }
+        }
+    }
+}
+
+// ── Tip breakdown display ─────────────────────────────────────────────────────
+
+@Composable
+private fun TipBreakdownDisplay(bill: Double, tipPercent: Double, people: Int) {
+    val colors = LocalAppColors.current
+    val tipAmount = bill * tipPercent / 100.0
+    val total = bill + tipAmount
+    val perPerson = if (people > 1) total / people else null
+    val pctLabel = if (tipPercent == tipPercent.toLong().toDouble())
+        tipPercent.toLong().toString() else "%.1f".format(tipPercent)
+    val shareText = buildString {
+        append("Tip ($pctLabel%): ${"%.2f".format(tipAmount)}\n")
+        append("Total: ${"%.2f".format(total)}")
+        if (perPerson != null) append("\nEach: ${"%.2f".format(perPerson)}")
+    }
+    Column(
+        modifier = Modifier.fillMaxWidth().padding(horizontal = 20.dp, vertical = 4.dp),
+        horizontalAlignment = Alignment.End
+    ) {
+        CopyableAmount(text = "Tip ($pctLabel%):  ${"%.2f".format(tipAmount)}", color = colors.textSecondary, shareText = shareText)
+        CopyableAmount(text = "Total:  ${"%.2f".format(total)}", color = colors.fromAmountColor, shareText = shareText)
+        if (perPerson != null) {
+            CopyableAmount(text = "Each:  ${"%.2f".format(perPerson)}", color = colors.toAmountColor, shareText = shareText)
+        }
+    }
+}
+
+// ── Fuel economy conversion row ───────────────────────────────────────────────
+
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+private fun FuelConversionRow(inputIsMpg: Boolean, useUkGallons: Boolean, rateLabel: String, onSwap: () -> Unit) {
+    val colors = LocalAppColors.current
+    val mpgLabel = if (useUkGallons) "mpg (UK)" else "mpg (US)"
+    val fromLabel = if (inputIsMpg) mpgLabel else "L/100km"
+    val toLabel   = if (inputIsMpg) "L/100km" else mpgLabel
+    val tooltipState = rememberTooltipState()
+    val scope = rememberCoroutineScope()
+    Column(modifier = Modifier.fillMaxWidth()) {
+        Row(
+            modifier = Modifier.fillMaxWidth().padding(horizontal = 12.dp, vertical = 4.dp),
+            horizontalArrangement = Arrangement.spacedBy(8.dp),
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            TooltipBox(
+                positionProvider = TooltipDefaults.rememberPlainTooltipPositionProvider(),
+                tooltip = { PlainTooltip { Text("Change UK or US gallons in Settings") } },
+                state = tooltipState
+            ) {
+                IconButton(onClick = { scope.launch { tooltipState.show() } }) {
+                    Icon(Icons.Default.Info, contentDescription = "Gallons info", tint = colors.textMuted, modifier = Modifier.size(18.dp))
+                }
+            }
+            androidx.compose.foundation.layout.Box(
+                modifier = Modifier.weight(1f).border(1.dp, colors.inputBorder, RoundedCornerShape(8.dp)).padding(horizontal = 12.dp, vertical = 10.dp)
+            ) { Text("From: $fromLabel", color = colors.textPrimary, fontSize = 13.sp, maxLines = 1) }
+            IconButton(onClick = onSwap) {
+                Icon(Icons.Default.SwapHoriz, contentDescription = "Swap direction", tint = colors.textSecondary)
+            }
+            androidx.compose.foundation.layout.Box(
+                modifier = Modifier.weight(1f).border(1.dp, colors.inputBorder, RoundedCornerShape(8.dp)).padding(horizontal = 12.dp, vertical = 10.dp)
+            ) { Text("To: $toLabel", color = colors.textPrimary, fontSize = 13.sp, maxLines = 1) }
+        }
+        if (rateLabel.isNotEmpty()) {
+            Text(rateLabel, color = colors.textSecondary, fontSize = 11.sp, modifier = Modifier.padding(horizontal = 16.dp, vertical = 2.dp))
         }
     }
 }
