@@ -1,4 +1,4 @@
-package com.example.calcapp.ui.theme
+package com.tripcalc.app.ui.theme
 
 import android.os.Build
 import androidx.compose.foundation.isSystemInDarkTheme

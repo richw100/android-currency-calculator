@@ -1,4 +1,4 @@
-package com.example.calcapp.ui
+package com.tripcalc.app.ui
 
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.layout.Arrangement

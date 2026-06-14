@@ -1,9 +1,9 @@
-package com.example.calcapp.ui
+package com.tripcalc.app.ui
 
 import android.app.Application
 import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
-import com.example.calcapp.data.ExchangeRateRepository
+import com.tripcalc.app.data.ExchangeRateRepository
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow

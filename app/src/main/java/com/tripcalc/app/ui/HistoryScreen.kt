@@ -1,4 +1,4 @@
-package com.example.calcapp.ui
+package com.tripcalc.app.ui
 
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*

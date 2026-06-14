@@ -1,4 +1,4 @@
-package com.example.calcapp.data
+package com.tripcalc.app.data
 
 import android.content.Context
 import androidx.datastore.core.DataStore
@@ -8,10 +8,10 @@ import androidx.datastore.preferences.core.edit
 import androidx.datastore.preferences.core.longPreferencesKey
 import androidx.datastore.preferences.core.stringPreferencesKey
 import androidx.datastore.preferences.preferencesDataStore
-import com.example.calcapp.ui.AccentScheme
-import com.example.calcapp.ui.CustomRateEntry
-import com.example.calcapp.ui.DarkModePref
-import com.example.calcapp.ui.HistoryEntry
+import com.tripcalc.app.ui.AccentScheme
+import com.tripcalc.app.ui.CustomRateEntry
+import com.tripcalc.app.ui.DarkModePref
+import com.tripcalc.app.ui.HistoryEntry
 import com.google.gson.Gson
 import com.google.gson.reflect.TypeToken
 import kotlinx.coroutines.flow.first

@@ -5,11 +5,11 @@ plugins {
 }
 
 android {
-    namespace = "com.example.calcapp"
+    namespace = "com.tripcalc.app"
     compileSdk = 35
 
     defaultConfig {
-        applicationId = "com.example.calcapp"
+        applicationId = "com.tripcalc.app"
         minSdk = 26
         targetSdk = 35
         versionCode = 1

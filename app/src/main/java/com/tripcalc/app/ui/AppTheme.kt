@@ -1,4 +1,4 @@
-package com.example.calcapp.ui
+package com.tripcalc.app.ui
 
 import androidx.compose.runtime.compositionLocalOf
 import androidx.compose.ui.graphics.Color

@@ -1,4 +1,4 @@
-package com.example.calcapp.ui
+package com.tripcalc.app.ui
 
 import android.content.Intent
 import android.net.Uri
@@ -51,8 +51,8 @@ import kotlin.math.abs
 import kotlinx.coroutines.launch
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.viewmodel.compose.viewModel
-import com.example.calcapp.R
-import com.example.calcapp.ui.theme.CalcAppTheme
+import com.tripcalc.app.R
+import com.tripcalc.app.ui.theme.CalcAppTheme
 
 fun currencyFlag(code: String): String {
     val countryCode = when (code) {

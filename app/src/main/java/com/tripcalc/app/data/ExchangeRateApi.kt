@@ -1,4 +1,4 @@
-package com.example.calcapp.data
+package com.tripcalc.app.data
 
 import com.google.gson.annotations.SerializedName
 import retrofit2.Retrofit
