@@ -72,6 +72,72 @@ fun SettingsScreen(vm: CalculatorViewModel, modifier: Modifier = Modifier) {
             .verticalScroll(rememberScrollState())
             .padding(horizontal = 20.dp, vertical = 16.dp)
     ) {
+        // ── Custom exchange rates ─────────────────────────────────────────────
+        Text("CUSTOM EXCHANGE RATES", fontSize = 12.sp, color = colors.textSecondary, fontWeight = FontWeight.Medium, modifier = Modifier.padding(bottom = 8.dp))
+        Text(
+            "Override any live rate with your own value. Useful for locked-in travel money or your bank's specific rate.",
+            fontSize = 13.sp, color = colors.textMuted, lineHeight = 19.sp, modifier = Modifier.padding(bottom = 16.dp)
+        )
+
+        if (state.customRates.isEmpty()) {
+            Text("No custom rates set.", fontSize = 14.sp, color = colors.textMuted, modifier = Modifier.padding(vertical = 8.dp))
+        } else {
+            state.customRates.entries.sortedBy { it.key }.forEach { (target, entry) ->
+                val targetName = currencyName(target)
+                val livePairRate = run {
+                    val b = state.liveRates[entry.base] ?: return@run null
+                    val t = state.liveRates[target] ?: return@run null
+                    if (b == 0.0) null else t / b
+                }
+
+                Card(
+                    modifier = Modifier.fillMaxWidth().padding(vertical = 4.dp),
+                    colors = CardDefaults.cardColors(containerColor = colors.surface)
+                ) {
+                    Row(
+                        modifier = Modifier.fillMaxWidth().padding(horizontal = 12.dp, vertical = 10.dp),
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Column(modifier = Modifier.weight(1f)) {
+                            Row(verticalAlignment = Alignment.CenterVertically) {
+                                Text(currencyFlag(entry.base), fontSize = 20.sp)
+                                Text(" ${entry.base} → ", color = colors.textSecondary, fontSize = 13.sp, fontWeight = FontWeight.Medium)
+                                Text(currencyFlag(target), fontSize = 20.sp)
+                                Text(" $target", color = colors.textSecondary, fontSize = 13.sp, fontWeight = FontWeight.Medium)
+                            }
+                            Text("1 ${entry.base} = ${"%.4f".format(entry.rate)} $target", color = colors.warningColor, fontSize = 14.sp, fontWeight = FontWeight.Medium)
+                            if (livePairRate != null) {
+                                Text("Live: ${"%.4f".format(livePairRate)}", color = colors.textMuted, fontSize = 11.sp)
+                            }
+                            Text(targetName, color = colors.textMuted, fontSize = 11.sp)
+                        }
+                        IconButton(onClick = { editingTarget = target; showDialog = true }) {
+                            Icon(Icons.Default.Edit, "Edit", tint = colors.textSecondary, modifier = Modifier.size(18.dp))
+                        }
+                        IconButton(onClick = { vm.onAction(CalculatorAction.ClearCustomRate(target)) }) {
+                            Icon(Icons.Default.Close, "Remove", tint = colors.textSecondary, modifier = Modifier.size(18.dp))
+                        }
+                    }
+                }
+            }
+        }
+
+        Spacer(Modifier.height(16.dp))
+
+        OutlinedButton(
+            onClick = { editingTarget = ""; showDialog = true },
+            modifier = Modifier.fillMaxWidth(),
+            shape = RoundedCornerShape(10.dp),
+            colors = ButtonDefaults.outlinedButtonColors(contentColor = colors.fromAmountColor),
+            border = BorderStroke(1.dp, colors.fromAmountColor)
+        ) {
+            Icon(Icons.Default.Add, null, modifier = Modifier.size(18.dp))
+            Spacer(Modifier.width(8.dp))
+            Text("Add custom rate", fontSize = 15.sp, modifier = Modifier.padding(vertical = 4.dp))
+        }
+
+        Spacer(Modifier.height(24.dp))
+
         // ── Appearance ──────────────────────────────────────────────────────
         Text("APPEARANCE", fontSize = 12.sp, color = colors.textSecondary, fontWeight = FontWeight.Medium, modifier = Modifier.padding(bottom = 8.dp))
 
@@ -85,7 +151,15 @@ fun SettingsScreen(vm: CalculatorViewModel, modifier: Modifier = Modifier) {
                         SegmentedButton(
                             selected = state.darkModePref == pref,
                             onClick = { vm.onAction(CalculatorAction.SetDarkMode(pref)) },
-                            shape = SegmentedButtonDefaults.itemShape(index = index, count = DarkModePref.values().size)
+                            shape = SegmentedButtonDefaults.itemShape(index = index, count = DarkModePref.values().size),
+                            colors = SegmentedButtonDefaults.colors(
+                                activeContainerColor   = colors.operator,
+                                activeContentColor     = colors.operatorContent,
+                                inactiveContainerColor = colors.buttonDigit,
+                                inactiveContentColor   = colors.textPrimary,
+                                activeBorderColor      = colors.operator,
+                                inactiveBorderColor    = colors.divider
+                            )
                         ) {
                             Text(pref.label, fontSize = 13.sp)
                         }
@@ -151,6 +225,88 @@ fun SettingsScreen(vm: CalculatorViewModel, modifier: Modifier = Modifier) {
 
             HorizontalDivider(modifier = Modifier.padding(horizontal = 16.dp), color = colors.divider)
 
+            Row(
+                modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 12.dp),
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Column(modifier = Modifier.weight(1f)) {
+                    Text("Swap 0 and . keys", color = colors.textPrimary, fontSize = 15.sp)
+                    Text("Put decimal point before zero in bottom row", color = colors.textSecondary, fontSize = 12.sp)
+                }
+                Switch(
+                    checked = state.swapZeroDot,
+                    onCheckedChange = { vm.onAction(CalculatorAction.SetSwapZeroDot(it)) },
+                    colors = SwitchDefaults.colors(checkedThumbColor = Color.White, checkedTrackColor = colors.positiveColor)
+                )
+            }
+
+            HorizontalDivider(modifier = Modifier.padding(horizontal = 16.dp), color = colors.divider)
+
+            Column(modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 12.dp)) {
+                Text("Active converters", color = colors.textPrimary, fontSize = 15.sp)
+                Text("Choose which modes appear in the tab bar", color = colors.textSecondary, fontSize = 12.sp)
+                Spacer(Modifier.height(10.dp))
+                ConversionMode.entries.forEach { mode ->
+                    val isEnabled = mode in state.enabledModes
+                    val isCurrency = mode == ConversionMode.CURRENCY
+                    Row(
+                        modifier = Modifier.fillMaxWidth().padding(vertical = 2.dp),
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Text(mode.tabLabel, fontSize = 14.sp, modifier = Modifier.padding(end = 8.dp))
+                        Text(
+                            mode.settingsLabel,
+                            color = if (isCurrency) colors.textMuted else colors.textPrimary,
+                            fontSize = 14.sp,
+                            modifier = Modifier.weight(1f)
+                        )
+                        Switch(
+                            checked = isEnabled,
+                            enabled = !isCurrency,
+                            onCheckedChange = { checked ->
+                                val newModes = if (checked) state.enabledModes + mode else state.enabledModes - mode
+                                vm.onAction(CalculatorAction.SetEnabledModes(newModes))
+                            },
+                            colors = SwitchDefaults.colors(checkedThumbColor = Color.White, checkedTrackColor = colors.positiveColor)
+                        )
+                    }
+                }
+            }
+
+            HorizontalDivider(modifier = Modifier.padding(horizontal = 16.dp), color = colors.divider)
+
+            Column(modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 12.dp)) {
+                Text("Distance unit pairs", color = colors.textPrimary, fontSize = 15.sp)
+                Text("Choose which conversions appear in the Distance tab", color = colors.textSecondary, fontSize = 12.sp)
+                Spacer(Modifier.height(10.dp))
+                DistancePair.entries.forEach { dp ->
+                    val isEnabled = dp in state.enabledDistancePairs
+                    val isMilesKm = dp == DistancePair.MILES_KM
+                    Row(
+                        modifier = Modifier.fillMaxWidth().padding(vertical = 2.dp),
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Text(
+                            dp.settingsLabel,
+                            color = if (isMilesKm) colors.textMuted else colors.textPrimary,
+                            fontSize = 14.sp,
+                            modifier = Modifier.weight(1f)
+                        )
+                        Switch(
+                            checked = isEnabled,
+                            enabled = !isMilesKm,
+                            onCheckedChange = { checked ->
+                                val newPairs = if (checked) state.enabledDistancePairs + dp else state.enabledDistancePairs - dp
+                                vm.onAction(CalculatorAction.SetEnabledDistancePairs(newPairs))
+                            },
+                            colors = SwitchDefaults.colors(checkedThumbColor = Color.White, checkedTrackColor = colors.positiveColor)
+                        )
+                    }
+                }
+            }
+
+            HorizontalDivider(modifier = Modifier.padding(horizontal = 16.dp), color = colors.divider)
+
             Column(modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 12.dp)) {
                 Text("Default tip %", color = colors.textPrimary, fontSize = 15.sp)
                 Text("Applied when you open the Tip calculator", color = colors.textSecondary, fontSize = 12.sp)
@@ -163,8 +319,10 @@ fun SettingsScreen(vm: CalculatorViewModel, modifier: Modifier = Modifier) {
                             label = { Text("${pct.toInt()}%", fontSize = 13.sp) },
                             modifier = Modifier.weight(1f),
                             colors = FilterChipDefaults.filterChipColors(
+                                containerColor = colors.buttonDigit,
+                                labelColor = colors.textPrimary,
                                 selectedContainerColor = colors.positiveColor,
-                                selectedLabelColor = androidx.compose.ui.graphics.Color.White
+                                selectedLabelColor = Color.White
                             )
                         )
                     }
@@ -216,8 +374,10 @@ fun SettingsScreen(vm: CalculatorViewModel, modifier: Modifier = Modifier) {
                             label = { Text(label, fontSize = 13.sp) },
                             modifier = Modifier.weight(1f),
                             colors = FilterChipDefaults.filterChipColors(
+                                containerColor = colors.buttonDigit,
+                                labelColor = colors.textPrimary,
                                 selectedContainerColor = colors.positiveColor,
-                                selectedLabelColor = androidx.compose.ui.graphics.Color.White
+                                selectedLabelColor = Color.White
                             )
                         )
                     }
@@ -246,71 +406,6 @@ fun SettingsScreen(vm: CalculatorViewModel, modifier: Modifier = Modifier) {
             }
         }
 
-        Spacer(Modifier.height(24.dp))
-
-        // ── Custom exchange rates ─────────────────────────────────────────────
-        Text("CUSTOM EXCHANGE RATES", fontSize = 12.sp, color = colors.textSecondary, fontWeight = FontWeight.Medium, modifier = Modifier.padding(bottom = 8.dp))
-        Text(
-            "Override any live rate with your own value. Useful for locked-in travel money or your bank's specific rate.",
-            fontSize = 13.sp, color = colors.textMuted, lineHeight = 19.sp, modifier = Modifier.padding(bottom = 16.dp)
-        )
-
-        if (state.customRates.isEmpty()) {
-            Text("No custom rates set.", fontSize = 14.sp, color = colors.textMuted, modifier = Modifier.padding(vertical = 8.dp))
-        } else {
-            state.customRates.entries.sortedBy { it.key }.forEach { (target, entry) ->
-                val targetName = currencyName(target)
-                val livePairRate = run {
-                    val b = state.liveRates[entry.base] ?: return@run null
-                    val t = state.liveRates[target] ?: return@run null
-                    if (b == 0.0) null else t / b
-                }
-
-                Card(
-                    modifier = Modifier.fillMaxWidth().padding(vertical = 4.dp),
-                    colors = CardDefaults.cardColors(containerColor = colors.surface)
-                ) {
-                    Row(
-                        modifier = Modifier.fillMaxWidth().padding(horizontal = 12.dp, vertical = 10.dp),
-                        verticalAlignment = Alignment.CenterVertically
-                    ) {
-                        Column(modifier = Modifier.weight(1f)) {
-                            Row(verticalAlignment = Alignment.CenterVertically) {
-                                Text(currencyFlag(entry.base), fontSize = 20.sp)
-                                Text(" ${entry.base} → ", color = colors.textSecondary, fontSize = 13.sp, fontWeight = FontWeight.Medium)
-                                Text(currencyFlag(target), fontSize = 20.sp)
-                                Text(" $target", color = colors.textSecondary, fontSize = 13.sp, fontWeight = FontWeight.Medium)
-                            }
-                            Text("1 ${entry.base} = ${"%.4f".format(entry.rate)} $target", color = colors.warningColor, fontSize = 14.sp, fontWeight = FontWeight.Medium)
-                            if (livePairRate != null) {
-                                Text("Live: ${"%.4f".format(livePairRate)}", color = colors.textMuted, fontSize = 11.sp)
-                            }
-                            Text(targetName, color = colors.textMuted, fontSize = 11.sp)
-                        }
-                        IconButton(onClick = { editingTarget = target; showDialog = true }) {
-                            Icon(Icons.Default.Edit, "Edit", tint = colors.textSecondary, modifier = Modifier.size(18.dp))
-                        }
-                        IconButton(onClick = { vm.onAction(CalculatorAction.ClearCustomRate(target)) }) {
-                            Icon(Icons.Default.Close, "Remove", tint = colors.textSecondary, modifier = Modifier.size(18.dp))
-                        }
-                    }
-                }
-            }
-        }
-
-        Spacer(Modifier.height(16.dp))
-
-        OutlinedButton(
-            onClick = { editingTarget = ""; showDialog = true },
-            modifier = Modifier.fillMaxWidth(),
-            shape = RoundedCornerShape(10.dp),
-            colors = ButtonDefaults.outlinedButtonColors(contentColor = colors.fromAmountColor),
-            border = BorderStroke(1.dp, colors.fromAmountColor)
-        ) {
-            Icon(Icons.Default.Add, null, modifier = Modifier.size(18.dp))
-            Spacer(Modifier.width(8.dp))
-            Text("Add custom rate", fontSize = 15.sp, modifier = Modifier.padding(vertical = 4.dp))
-        }
     }
 }
 

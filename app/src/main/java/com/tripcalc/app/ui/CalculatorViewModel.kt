@@ -13,11 +13,24 @@ import java.util.Currency as JavaCurrency
 import kotlin.math.abs
 import kotlin.math.floor
 
-enum class ConversionMode { CURRENCY, DISTANCE, TEMPERATURE, TIP, FUEL }
+enum class ConversionMode(val tabLabel: String, val settingsLabel: String) {
+    CURRENCY("💱 FX",    "Currency (always on)"),
+    DISTANCE("📏 Dist",  "Distance converter"),
+    TEMPERATURE("🌡 Temp", "Temperature converter"),
+    TIP("🍽 Tip",        "Tip & bill splitter"),
+    FUEL("⛽ mpg",       "Fuel economy")
+}
 
-enum class DistanceUnit(val label: String, val abbr: String) {
-    MILES("Miles", "mi"),
-    KM("Kilometres", "km")
+enum class DistancePair(
+    val fromLabel: String, val fromAbbr: String,
+    val toLabel: String,   val toAbbr: String,
+    val factor: Double,
+    val settingsLabel: String
+) {
+    MILES_KM ("Miles",   "mi",  "Kilometres",  "km",  1.60934,  "Miles ↔ Kilometres"),
+    INCHES_CM("Inches",  "in",  "Centimetres", "cm",  2.54,     "Inches ↔ Centimetres"),
+    FEET_M   ("Feet",    "ft",  "Metres",      "m",   0.3048,   "Feet ↔ Metres"),
+    SQFT_SQM ("Sq feet", "ft²", "Sq metres",   "m²",  0.092903, "Sq feet ↔ Sq metres")
 }
 
 enum class TempUnit(val label: String, val abbr: String) {
@@ -62,14 +75,18 @@ data class CalculatorUiState(
     val darkModePref: DarkModePref = DarkModePref.SYSTEM,
     val accentScheme: AccentScheme = AccentScheme.TEAL_GREEN,
     val conversionMode: ConversionMode = ConversionMode.CURRENCY,
-    val distanceUnit: DistanceUnit = DistanceUnit.MILES,
+    val distancePair: DistancePair = DistancePair.MILES_KM,
+    val distanceReversed: Boolean = false,
+    val enabledDistancePairs: Set<DistancePair> = setOf(DistancePair.MILES_KM),
     val tempUnit: TempUnit = TempUnit.CELSIUS,
     val defaultTipPercent: Double = 10.0,
     val tipPercent: Double = 10.0,
     val customTipPercent: Double = 12.5,
     val tipPeopleCount: Int = 1,
     val fuelInputIsMpg: Boolean = true,
-    val fuelUseUkGallons: Boolean = true
+    val fuelUseUkGallons: Boolean = true,
+    val swapZeroDot: Boolean = false,
+    val enabledModes: Set<ConversionMode> = ConversionMode.entries.toSet()
 )
 
 sealed class CalculatorAction {
@@ -97,6 +114,8 @@ sealed class CalculatorAction {
     data class SetAccentScheme(val scheme: AccentScheme) : CalculatorAction()
     data class SetConversionMode(val mode: ConversionMode) : CalculatorAction()
     object SwapDistanceUnits : CalculatorAction()
+    data class SetDistancePair(val pair: DistancePair) : CalculatorAction()
+    data class SetEnabledDistancePairs(val pairs: Set<DistancePair>) : CalculatorAction()
     data class DeleteHistoryEntry(val timestamp: Long) : CalculatorAction()
     data class SetHistoryNote(val timestamp: Long, val note: String?) : CalculatorAction()
     object SwapTempUnits : CalculatorAction()
@@ -105,6 +124,8 @@ sealed class CalculatorAction {
     data class SetCustomTipPercent(val percent: Double) : CalculatorAction()
     object SwapFuelDirection : CalculatorAction()
     data class SetFuelUseUkGallons(val useUk: Boolean) : CalculatorAction()
+    data class SetSwapZeroDot(val enabled: Boolean) : CalculatorAction()
+    data class SetEnabledModes(val modes: Set<ConversionMode>) : CalculatorAction()
     data class SetDefaultTipPercent(val percent: Double) : CalculatorAction()
     object SendTipShareToFX : CalculatorAction()
 }
@@ -144,7 +165,10 @@ class CalculatorViewModel(application: Application) : AndroidViewModel(applicati
             val defaultTipPercent = repository.loadDefaultTipPercent()
             val customTipPercent = repository.loadCustomTipPercent()
             val fuelUseUkGallons = repository.loadFuelUseUkGallons()
-            _uiState.update { it.copy(toCurrency = to, fromCurrency = from, recentCurrencies = recents, customRates = customRates, hapticEnabled = hapticEnabled, history = history, darkModePref = darkModePref, accentScheme = accentScheme, defaultTipPercent = defaultTipPercent, tipPercent = defaultTipPercent, customTipPercent = customTipPercent, fuelUseUkGallons = fuelUseUkGallons) }
+            val swapZeroDot = repository.loadSwapZeroDot()
+            val enabledModes = repository.loadEnabledModes()
+            val enabledDistancePairs = repository.loadEnabledDistancePairs()
+            _uiState.update { it.copy(toCurrency = to, fromCurrency = from, recentCurrencies = recents, customRates = customRates, hapticEnabled = hapticEnabled, history = history, darkModePref = darkModePref, accentScheme = accentScheme, defaultTipPercent = defaultTipPercent, tipPercent = defaultTipPercent, customTipPercent = customTipPercent, fuelUseUkGallons = fuelUseUkGallons, swapZeroDot = swapZeroDot, enabledModes = enabledModes, enabledDistancePairs = enabledDistancePairs) }
             fetchRates(forceRefresh = false)
         }
     }
@@ -285,8 +309,19 @@ class CalculatorViewModel(application: Application) : AndroidViewModel(applicati
                 updateDisplay(); return
             }
             is CalculatorAction.SwapDistanceUnits -> {
-                val newUnit = if (_uiState.value.distanceUnit == DistanceUnit.MILES) DistanceUnit.KM else DistanceUnit.MILES
-                _uiState.update { it.copy(distanceUnit = newUnit) }
+                _uiState.update { it.copy(distanceReversed = !it.distanceReversed) }
+                updateDisplay(); return
+            }
+            is CalculatorAction.SetDistancePair -> {
+                _uiState.update { it.copy(distancePair = action.pair, distanceReversed = false) }
+                updateDisplay(); return
+            }
+            is CalculatorAction.SetEnabledDistancePairs -> {
+                val pairs = (action.pairs + DistancePair.MILES_KM)
+                val current = _uiState.value.distancePair
+                val newPair = if (current in pairs) current else DistancePair.MILES_KM
+                _uiState.update { it.copy(enabledDistancePairs = pairs, distancePair = newPair) }
+                viewModelScope.launch { repository.saveEnabledDistancePairs(pairs) }
                 updateDisplay(); return
             }
             is CalculatorAction.SwapTempUnits -> {
@@ -314,6 +349,19 @@ class CalculatorViewModel(application: Application) : AndroidViewModel(applicati
             is CalculatorAction.SetFuelUseUkGallons -> {
                 _uiState.update { it.copy(fuelUseUkGallons = action.useUk) }
                 viewModelScope.launch { repository.saveFuelUseUkGallons(action.useUk) }
+                updateDisplay(); return
+            }
+            is CalculatorAction.SetSwapZeroDot -> {
+                _uiState.update { it.copy(swapZeroDot = action.enabled) }
+                viewModelScope.launch { repository.saveSwapZeroDot(action.enabled) }
+                updateDisplay(); return
+            }
+            is CalculatorAction.SetEnabledModes -> {
+                val modes = (action.modes + ConversionMode.CURRENCY)
+                val currentMode = _uiState.value.conversionMode
+                val newMode = if (currentMode in modes) currentMode else ConversionMode.CURRENCY
+                _uiState.update { it.copy(enabledModes = modes, conversionMode = newMode) }
+                viewModelScope.launch { repository.saveEnabledModes(modes) }
                 updateDisplay(); return
             }
             is CalculatorAction.SetDefaultTipPercent -> {
@@ -524,7 +572,8 @@ class CalculatorViewModel(application: Application) : AndroidViewModel(applicati
 
     private fun recordHistory() {
         val state = _uiState.value
-        val toDistUnit = if (state.distanceUnit == DistanceUnit.MILES) DistanceUnit.KM else DistanceUnit.MILES
+        val distFrom = if (state.distanceReversed) state.distancePair.toAbbr else state.distancePair.fromAbbr
+        val distTo   = if (state.distanceReversed) state.distancePair.fromAbbr else state.distancePair.toAbbr
         val toTempUnit = if (state.tempUnit == TempUnit.CELSIUS) TempUnit.FAHRENHEIT else TempUnit.CELSIUS
         val pctLabel = if (state.tipPercent == state.tipPercent.toLong().toDouble())
             state.tipPercent.toLong().toString() else "%.1f".format(state.tipPercent)
@@ -534,14 +583,14 @@ class CalculatorViewModel(application: Application) : AndroidViewModel(applicati
             fromAmount = state.fromAmount,
             toAmount = state.toAmount,
             fromCurrency = when (state.conversionMode) {
-                ConversionMode.DISTANCE -> state.distanceUnit.abbr
+                ConversionMode.DISTANCE -> distFrom
                 ConversionMode.TEMPERATURE -> state.tempUnit.abbr
                 ConversionMode.TIP -> "$pctLabel%"
                 ConversionMode.FUEL -> if (state.fuelInputIsMpg) (if (state.fuelUseUkGallons) "mpg (UK)" else "mpg (US)") else "L/100km"
                 ConversionMode.CURRENCY -> state.fromCurrency
             },
             toCurrency = when (state.conversionMode) {
-                ConversionMode.DISTANCE -> toDistUnit.abbr
+                ConversionMode.DISTANCE -> distTo
                 ConversionMode.TEMPERATURE -> toTempUnit.abbr
                 ConversionMode.TIP -> "${state.tipPeopleCount}p"
                 ConversionMode.FUEL -> if (state.fuelInputIsMpg) "L/100km" else (if (state.fuelUseUkGallons) "mpg (UK)" else "mpg (US)")
@@ -646,16 +695,16 @@ class CalculatorViewModel(application: Application) : AndroidViewModel(applicati
 
     private fun updateDistanceDisplay() {
         val value = currentInput.toDoubleOrNull() ?: 0.0
-        val unit = _uiState.value.distanceUnit
-        val (fromAbbr, toAbbr, factor) = when (unit) {
-            DistanceUnit.MILES -> Triple("mi", "km", 1.60934)
-            DistanceUnit.KM    -> Triple("km", "mi", 0.621371)
-        }
+        val s = _uiState.value
+        val pair = s.distancePair
+        val fromAbbr = if (s.distanceReversed) pair.toAbbr   else pair.fromAbbr
+        val toAbbr   = if (s.distanceReversed) pair.fromAbbr else pair.toAbbr
+        val factor   = if (s.distanceReversed) 1.0 / pair.factor else pair.factor
         val converted = value * factor
         _uiState.update {
             it.copy(
-                fromAmount = "$fromAbbr ${"%.3f".format(value)}",
-                toAmount = "$toAbbr ${"%.3f".format(converted)}",
+                fromAmount = "$fromAbbr ${"%.4f".format(value)}",
+                toAmount = "$toAbbr ${"%.4f".format(converted)}",
                 exchangeRateLabel = "1 $fromAbbr = ${"%.5f".format(factor)} $toAbbr",
                 customRatePctDiff = null
             )

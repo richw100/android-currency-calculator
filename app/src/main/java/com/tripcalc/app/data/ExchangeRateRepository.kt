@@ -7,8 +7,11 @@ import androidx.datastore.preferences.core.booleanPreferencesKey
 import androidx.datastore.preferences.core.edit
 import androidx.datastore.preferences.core.longPreferencesKey
 import androidx.datastore.preferences.core.stringPreferencesKey
+import androidx.datastore.preferences.core.stringSetPreferencesKey
 import androidx.datastore.preferences.preferencesDataStore
 import com.tripcalc.app.ui.AccentScheme
+import com.tripcalc.app.ui.ConversionMode
+import com.tripcalc.app.ui.DistancePair
 import com.tripcalc.app.ui.CustomRateEntry
 import com.tripcalc.app.ui.DarkModePref
 import com.tripcalc.app.ui.HistoryEntry
@@ -170,4 +173,39 @@ class ExchangeRateRepository(private val context: Context) {
 
     suspend fun loadFuelUseUkGallons(): Boolean =
         context.dataStore.data.first()[fuelUseUkGallonsKey] ?: true
+
+    private val swapZeroDotKey = booleanPreferencesKey("swap_zero_dot")
+
+    suspend fun saveSwapZeroDot(enabled: Boolean) {
+        context.dataStore.edit { it[swapZeroDotKey] = enabled }
+    }
+
+    suspend fun loadSwapZeroDot(): Boolean =
+        context.dataStore.data.first()[swapZeroDotKey] ?: false
+
+    private val enabledModesKey = stringSetPreferencesKey("enabled_modes")
+
+    suspend fun saveEnabledModes(modes: Set<ConversionMode>) {
+        context.dataStore.edit { it[enabledModesKey] = modes.map { m -> m.name }.toSet() }
+    }
+
+    suspend fun loadEnabledModes(): Set<ConversionMode> {
+        val names = context.dataStore.data.first()[enabledModesKey]
+            ?: return ConversionMode.entries.toSet()
+        return names.mapNotNull { name -> ConversionMode.entries.find { it.name == name } }.toSet()
+            .ifEmpty { ConversionMode.entries.toSet() }
+    }
+
+    private val enabledDistancePairsKey = stringSetPreferencesKey("enabled_distance_pairs")
+
+    suspend fun saveEnabledDistancePairs(pairs: Set<DistancePair>) {
+        context.dataStore.edit { it[enabledDistancePairsKey] = pairs.map { p -> p.name }.toSet() }
+    }
+
+    suspend fun loadEnabledDistancePairs(): Set<DistancePair> {
+        val names = context.dataStore.data.first()[enabledDistancePairsKey]
+            ?: return setOf(DistancePair.MILES_KM)
+        return names.mapNotNull { name -> DistancePair.entries.find { it.name == name } }.toSet()
+            .ifEmpty { setOf(DistancePair.MILES_KM) }
+    }
 }

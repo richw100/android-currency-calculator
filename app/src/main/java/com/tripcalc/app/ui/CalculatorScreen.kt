@@ -309,37 +309,29 @@ fun CalculatorScreen(vm: CalculatorViewModel = viewModel(), modifier: Modifier =
     }
 
     Column(modifier = modifier.fillMaxWidth().verticalScroll(rememberScrollState())) {
-        // Mode toggle
+        // Mode toggle — only show enabled modes (CURRENCY always first)
+        val visibleModes = ConversionMode.entries.filter { it in state.enabledModes }
+        val segmentColors = SegmentedButtonDefaults.colors(
+            activeContainerColor   = colors.operator,
+            activeContentColor     = colors.operatorContent,
+            inactiveContainerColor = colors.surface,
+            inactiveContentColor   = colors.textPrimary,
+            activeBorderColor      = colors.operator,
+            inactiveBorderColor    = colors.divider
+        )
         SingleChoiceSegmentedButtonRow(
             modifier = Modifier
                 .fillMaxWidth()
                 .padding(start = 12.dp, end = 12.dp, top = 4.dp, bottom = 2.dp)
         ) {
-            SegmentedButton(
-                selected = state.conversionMode == ConversionMode.CURRENCY,
-                onClick = { vm.onAction(CalculatorAction.SetConversionMode(ConversionMode.CURRENCY)) },
-                shape = SegmentedButtonDefaults.itemShape(index = 0, count = 5)
-            ) { Text("💱 FX", fontSize = 11.sp) }
-            SegmentedButton(
-                selected = state.conversionMode == ConversionMode.DISTANCE,
-                onClick = { vm.onAction(CalculatorAction.SetConversionMode(ConversionMode.DISTANCE)) },
-                shape = SegmentedButtonDefaults.itemShape(index = 1, count = 5)
-            ) { Text("📏 Dist", fontSize = 11.sp) }
-            SegmentedButton(
-                selected = state.conversionMode == ConversionMode.TEMPERATURE,
-                onClick = { vm.onAction(CalculatorAction.SetConversionMode(ConversionMode.TEMPERATURE)) },
-                shape = SegmentedButtonDefaults.itemShape(index = 2, count = 5)
-            ) { Text("🌡 Temp", fontSize = 11.sp) }
-            SegmentedButton(
-                selected = state.conversionMode == ConversionMode.TIP,
-                onClick = { vm.onAction(CalculatorAction.SetConversionMode(ConversionMode.TIP)) },
-                shape = SegmentedButtonDefaults.itemShape(index = 3, count = 5)
-            ) { Text("🍽 Tip", fontSize = 11.sp) }
-            SegmentedButton(
-                selected = state.conversionMode == ConversionMode.FUEL,
-                onClick = { vm.onAction(CalculatorAction.SetConversionMode(ConversionMode.FUEL)) },
-                shape = SegmentedButtonDefaults.itemShape(index = 4, count = 5)
-            ) { Text("⛽ mpg", fontSize = 11.sp) }
+            visibleModes.forEachIndexed { index, mode ->
+                SegmentedButton(
+                    selected = state.conversionMode == mode,
+                    onClick = { vm.onAction(CalculatorAction.SetConversionMode(mode)) },
+                    shape = SegmentedButtonDefaults.itemShape(index = index, count = visibleModes.size),
+                    colors = segmentColors
+                ) { Text(mode.tabLabel, fontSize = 11.sp) }
+            }
         }
 
         when (state.conversionMode) {
@@ -449,9 +441,12 @@ fun CalculatorScreen(vm: CalculatorViewModel = viewModel(), modifier: Modifier =
             }
         }
         ConversionMode.DISTANCE -> DistanceConversionRow(
-            unit = state.distanceUnit,
+            pair = state.distancePair,
+            reversed = state.distanceReversed,
+            enabledPairs = state.enabledDistancePairs,
             rateLabel = state.exchangeRateLabel,
-            onSwap = { vm.onAction(CalculatorAction.SwapDistanceUnits) }
+            onSwap = { vm.onAction(CalculatorAction.SwapDistanceUnits) },
+            onSelectPair = { vm.onAction(CalculatorAction.SetDistancePair(it)) }
         )
         ConversionMode.TEMPERATURE -> TempConversionRow(
             unit = state.tempUnit,
@@ -575,6 +570,7 @@ fun CalculatorScreen(vm: CalculatorViewModel = viewModel(), modifier: Modifier =
         ButtonGrid(
             onAction = vm::onAction,
             hapticEnabled = state.hapticEnabled,
+            swapZeroDot = state.swapZeroDot,
             modifier = Modifier.padding(start = 8.dp, top = 2.dp, end = 8.dp, bottom = 2.dp)
         )
 
@@ -695,13 +691,42 @@ private fun CurrencyPickerRow(code: String, colors: AppColors, star: Boolean, on
 
 @Composable
 private fun DistanceConversionRow(
-    unit: DistanceUnit,
+    pair: DistancePair,
+    reversed: Boolean,
+    enabledPairs: Set<DistancePair>,
     rateLabel: String,
-    onSwap: () -> Unit
+    onSwap: () -> Unit,
+    onSelectPair: (DistancePair) -> Unit
 ) {
     val colors = LocalAppColors.current
-    val toUnit = if (unit == DistanceUnit.MILES) DistanceUnit.KM else DistanceUnit.MILES
+    val fromLabel = if (reversed) "${pair.toLabel} (${pair.toAbbr})" else "${pair.fromLabel} (${pair.fromAbbr})"
+    val toLabel   = if (reversed) "${pair.fromLabel} (${pair.fromAbbr})" else "${pair.toLabel} (${pair.toAbbr})"
+    val visiblePairs = DistancePair.entries.filter { it in enabledPairs }
     Column(modifier = Modifier.fillMaxWidth()) {
+        // Pair selector chips — only shown when more than one pair is enabled
+        if (visiblePairs.size > 1) {
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(horizontal = 12.dp, vertical = 2.dp),
+                horizontalArrangement = Arrangement.spacedBy(6.dp)
+            ) {
+                visiblePairs.forEach { p ->
+                    val selected = p == pair
+                    FilterChip(
+                        selected = selected,
+                        onClick = { onSelectPair(p) },
+                        label = { Text("${p.fromAbbr}↔${p.toAbbr}", fontSize = 11.sp) },
+                        colors = FilterChipDefaults.filterChipColors(
+                            containerColor = colors.buttonDigit,
+                            labelColor = colors.textPrimary,
+                            selectedContainerColor = colors.operator,
+                            selectedLabelColor = colors.operatorContent
+                        )
+                    )
+                }
+            }
+        }
         Row(
             modifier = Modifier
                 .fillMaxWidth()
@@ -715,12 +740,7 @@ private fun DistanceConversionRow(
                     .border(1.dp, colors.inputBorder, RoundedCornerShape(8.dp))
                     .padding(horizontal = 12.dp, vertical = 10.dp)
             ) {
-                Text(
-                    text = "From: ${unit.label} (${unit.abbr})",
-                    color = colors.textPrimary,
-                    fontSize = 13.sp,
-                    maxLines = 1
-                )
+                Text(text = "From: $fromLabel", color = colors.textPrimary, fontSize = 13.sp, maxLines = 1)
             }
             IconButton(onClick = onSwap) {
                 Icon(Icons.Default.SwapHoriz, contentDescription = "Swap units", tint = colors.textSecondary)
@@ -731,12 +751,7 @@ private fun DistanceConversionRow(
                     .border(1.dp, colors.inputBorder, RoundedCornerShape(8.dp))
                     .padding(horizontal = 12.dp, vertical = 10.dp)
             ) {
-                Text(
-                    text = "To: ${toUnit.label} (${toUnit.abbr})",
-                    color = colors.textPrimary,
-                    fontSize = 13.sp,
-                    maxLines = 1
-                )
+                Text(text = "To: $toLabel", color = colors.textPrimary, fontSize = 13.sp, maxLines = 1)
             }
         }
         if (rateLabel.isNotEmpty()) {
@@ -1148,7 +1163,7 @@ private fun RefreshCustomRateDialog(
 private data class BtnDef(val label: String, val bg: Color, val fg: Color = Color.White, val action: CalculatorAction)
 
 @Composable
-fun ButtonGrid(onAction: (CalculatorAction) -> Unit, hapticEnabled: Boolean = true, modifier: Modifier = Modifier) {
+fun ButtonGrid(onAction: (CalculatorAction) -> Unit, hapticEnabled: Boolean = true, swapZeroDot: Boolean = false, modifier: Modifier = Modifier) {
     val colors = LocalAppColors.current
 
     val rows = listOf(
@@ -1192,10 +1207,14 @@ fun ButtonGrid(onAction: (CalculatorAction) -> Unit, hapticEnabled: Boolean = tr
             }
             Spacer(modifier = Modifier.height(8.dp))
         }
-        // Bottom row: 0, ., ⌫, =
+        // Bottom row: 0, ., ⌫, = (order of first two swappable via setting)
         Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-            CalcButton("0", colors.buttonDigit, fg = colors.buttonDigitContent, hapticEnabled = hapticEnabled, onClick = { onAction(CalculatorAction.Digit(0)) },   modifier = Modifier.weight(1f))
-            CalcButton(".", colors.buttonDigit, fg = colors.buttonDigitContent, hapticEnabled = hapticEnabled, onClick = { onAction(CalculatorAction.Decimal) },    modifier = Modifier.weight(1f))
+            val firstLabel  = if (swapZeroDot) "." else "0"
+            val secondLabel = if (swapZeroDot) "0" else "."
+            val firstAction  = if (swapZeroDot) CalculatorAction.Decimal else CalculatorAction.Digit(0)
+            val secondAction = if (swapZeroDot) CalculatorAction.Digit(0) else CalculatorAction.Decimal
+            CalcButton(firstLabel,  colors.buttonDigit, fg = colors.buttonDigitContent, hapticEnabled = hapticEnabled, onClick = { onAction(firstAction) },  modifier = Modifier.weight(1f))
+            CalcButton(secondLabel, colors.buttonDigit, fg = colors.buttonDigitContent, hapticEnabled = hapticEnabled, onClick = { onAction(secondAction) }, modifier = Modifier.weight(1f))
             CalcButton("⌫", colors.buttonDigit, fg = colors.buttonDigitContent, hapticEnabled = hapticEnabled, onClick = { onAction(CalculatorAction.Delete) },     modifier = Modifier.weight(1f))
             CalcButton("=", colors.equals,      fg = colors.equalsContent,      hapticEnabled = hapticEnabled, onClick = { onAction(CalculatorAction.Calculate) },  modifier = Modifier.weight(1f))
         }
