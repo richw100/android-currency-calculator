@@ -19,3 +19,8 @@ app/build/
 
 # Development leftovers
 app.old/
+
+# Signing — never commit these
+*.jks
+*.keystore
+keystore.properties
