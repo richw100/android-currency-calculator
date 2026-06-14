@@ -38,6 +38,15 @@ fun SettingsScreen(vm: CalculatorViewModel, modifier: Modifier = Modifier) {
     val colors = LocalAppColors.current
     var showDialog by remember { mutableStateOf(false) }
     var editingTarget by remember { mutableStateOf("") }
+    var customTipInput by remember(state.customTipPercent) {
+        mutableStateOf(
+            if (state.customTipPercent == state.customTipPercent.toLong().toDouble())
+                state.customTipPercent.toLong().toString()
+            else "%.1f".format(state.customTipPercent)
+        )
+    }
+    val customTipValue = customTipInput.toDoubleOrNull()
+    val customTipValid = customTipValue != null && customTipValue > 0 && customTipValue <= 100
 
     if (showDialog) {
         val existing = state.customRates[editingTarget]
@@ -164,19 +173,55 @@ fun SettingsScreen(vm: CalculatorViewModel, modifier: Modifier = Modifier) {
 
             HorizontalDivider(modifier = Modifier.padding(horizontal = 16.dp), color = colors.divider)
 
-            Row(
-                modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 12.dp),
-                verticalAlignment = Alignment.CenterVertically
-            ) {
-                Column(modifier = Modifier.weight(1f)) {
-                    Text("Fuel economy — UK gallons", color = colors.textPrimary, fontSize = 15.sp)
-                    Text("Use Imperial (UK) gallons for mpg", color = colors.textSecondary, fontSize = 12.sp)
+            Column(modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 12.dp)) {
+                Text("Custom tip %", color = colors.textPrimary, fontSize = 15.sp)
+                Text("Shown as a 4th option in the tip calculator", color = colors.textSecondary, fontSize = 12.sp)
+                Spacer(Modifier.height(10.dp))
+                Row(
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(8.dp)
+                ) {
+                    OutlinedTextField(
+                        value = customTipInput,
+                        onValueChange = { customTipInput = it },
+                        modifier = Modifier.weight(1f),
+                        singleLine = true,
+                        suffix = { Text("%", color = colors.textSecondary) },
+                        keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal),
+                        colors = OutlinedTextFieldDefaults.colors(
+                            focusedTextColor = colors.textPrimary,
+                            unfocusedTextColor = colors.textPrimary
+                        )
+                    )
+                    TextButton(
+                        onClick = { customTipValue?.let { vm.onAction(CalculatorAction.SetCustomTipPercent(it)) } },
+                        enabled = customTipValid && customTipValue != state.customTipPercent
+                    ) {
+                        Text("Set", color = if (customTipValid && customTipValue != state.customTipPercent) colors.fromAmountColor else colors.textMuted)
+                    }
                 }
-                Switch(
-                    checked = state.fuelUseUkGallons,
-                    onCheckedChange = { vm.onAction(CalculatorAction.SetFuelUseUkGallons(it)) },
-                    colors = SwitchDefaults.colors(checkedThumbColor = androidx.compose.ui.graphics.Color.White, checkedTrackColor = colors.positiveColor)
-                )
+            }
+
+            HorizontalDivider(modifier = Modifier.padding(horizontal = 16.dp), color = colors.divider)
+
+            Column(modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 12.dp)) {
+                Text("Fuel economy — gallons", color = colors.textPrimary, fontSize = 15.sp)
+                Text("Which gallon size to use for mpg conversions", color = colors.textSecondary, fontSize = 12.sp)
+                Spacer(Modifier.height(10.dp))
+                Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                    listOf(true to "UK (Imperial)", false to "US").forEach { (isUk, label) ->
+                        FilterChip(
+                            selected = state.fuelUseUkGallons == isUk,
+                            onClick = { vm.onAction(CalculatorAction.SetFuelUseUkGallons(isUk)) },
+                            label = { Text(label, fontSize = 13.sp) },
+                            modifier = Modifier.weight(1f),
+                            colors = FilterChipDefaults.filterChipColors(
+                                selectedContainerColor = colors.positiveColor,
+                                selectedLabelColor = androidx.compose.ui.graphics.Color.White
+                            )
+                        )
+                    }
+                }
             }
 
             HorizontalDivider(modifier = Modifier.padding(horizontal = 16.dp), color = colors.divider)

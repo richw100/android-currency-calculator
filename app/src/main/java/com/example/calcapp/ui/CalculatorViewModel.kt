@@ -66,6 +66,7 @@ data class CalculatorUiState(
     val tempUnit: TempUnit = TempUnit.CELSIUS,
     val defaultTipPercent: Double = 10.0,
     val tipPercent: Double = 10.0,
+    val customTipPercent: Double = 12.5,
     val tipPeopleCount: Int = 1,
     val fuelInputIsMpg: Boolean = true,
     val fuelUseUkGallons: Boolean = true
@@ -101,6 +102,7 @@ sealed class CalculatorAction {
     object SwapTempUnits : CalculatorAction()
     data class SetTipPercent(val percent: Double) : CalculatorAction()
     data class SetTipPeople(val count: Int) : CalculatorAction()
+    data class SetCustomTipPercent(val percent: Double) : CalculatorAction()
     object SwapFuelDirection : CalculatorAction()
     data class SetFuelUseUkGallons(val useUk: Boolean) : CalculatorAction()
     data class SetDefaultTipPercent(val percent: Double) : CalculatorAction()
@@ -138,8 +140,9 @@ class CalculatorViewModel(application: Application) : AndroidViewModel(applicati
             val darkModePref = repository.loadDarkModePref()
             val accentScheme = repository.loadAccentScheme()
             val defaultTipPercent = repository.loadDefaultTipPercent()
+            val customTipPercent = repository.loadCustomTipPercent()
             val fuelUseUkGallons = repository.loadFuelUseUkGallons()
-            _uiState.update { it.copy(toCurrency = to, fromCurrency = from, recentCurrencies = recents, customRates = customRates, hapticEnabled = hapticEnabled, history = history, darkModePref = darkModePref, accentScheme = accentScheme, defaultTipPercent = defaultTipPercent, tipPercent = defaultTipPercent, fuelUseUkGallons = fuelUseUkGallons) }
+            _uiState.update { it.copy(toCurrency = to, fromCurrency = from, recentCurrencies = recents, customRates = customRates, hapticEnabled = hapticEnabled, history = history, darkModePref = darkModePref, accentScheme = accentScheme, defaultTipPercent = defaultTipPercent, tipPercent = defaultTipPercent, customTipPercent = customTipPercent, fuelUseUkGallons = fuelUseUkGallons) }
             fetchRates(forceRefresh = false)
         }
     }
@@ -289,6 +292,11 @@ class CalculatorViewModel(application: Application) : AndroidViewModel(applicati
             }
             is CalculatorAction.SetTipPeople -> {
                 _uiState.update { it.copy(tipPeopleCount = action.count.coerceIn(1, 20)) }
+                updateDisplay(); return
+            }
+            is CalculatorAction.SetCustomTipPercent -> {
+                _uiState.update { it.copy(customTipPercent = action.percent, tipPercent = action.percent) }
+                viewModelScope.launch { repository.saveCustomTipPercent(action.percent) }
                 updateDisplay(); return
             }
             is CalculatorAction.SwapFuelDirection -> {

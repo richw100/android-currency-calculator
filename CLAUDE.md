@@ -29,8 +29,9 @@ docs/
 # Build debug APK
 cd ~/calcApp && ./gradlew assembleDebug
 
-# Connect and install over WiFi ADB (connect port changes every session — check Wireless Debugging screen)
-~/android/platform-tools/adb connect <ip>:<connect-port>
+# Connect and install over WiFi ADB
+# Port changes every session — user provides it and it is saved to ~/.adb_port
+PORT=$(cat ~/.adb_port) && ~/android/platform-tools/adb connect 192.168.68.128:$PORT
 ~/android/platform-tools/adb install -r app/build/outputs/apk/debug/app-debug.apk
 ```
 

@@ -39,6 +39,8 @@ import androidx.compose.ui.platform.LocalClipboardManager
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.text.AnnotatedString
+import androidx.compose.foundation.text.KeyboardOptions
+import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.window.Dialog
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
@@ -458,8 +460,10 @@ fun CalculatorScreen(vm: CalculatorViewModel = viewModel(), modifier: Modifier =
         )
         ConversionMode.TIP -> TipControlsRow(
             tipPercent = state.tipPercent,
+            customTipPercent = state.customTipPercent,
             people = state.tipPeopleCount,
             onSetPercent = { vm.onAction(CalculatorAction.SetTipPercent(it)) },
+            onSetCustomPercent = { vm.onAction(CalculatorAction.SetCustomTipPercent(it)) },
             onSetPeople = { vm.onAction(CalculatorAction.SetTipPeople(it)) }
         )
         ConversionMode.FUEL -> FuelConversionRow(
@@ -788,41 +792,78 @@ private fun TempConversionRow(unit: TempUnit, rateLabel: String, onSwap: () -> U
 
 // ── Tip controls row ──────────────────────────────────────────────────────────
 
+@OptIn(ExperimentalMaterial3Api::class)
 @Composable
 private fun TipControlsRow(
     tipPercent: Double,
+    customTipPercent: Double,
     people: Int,
     onSetPercent: (Double) -> Unit,
+    onSetCustomPercent: (Double) -> Unit,
     onSetPeople: (Int) -> Unit
 ) {
     val colors = LocalAppColors.current
+    val scope = rememberCoroutineScope()
+    val tooltipState = rememberTooltipState()
+    var showCustomDialog by remember { mutableStateOf(false) }
+
+    if (showCustomDialog) {
+        CustomTipPercentDialog(
+            current = customTipPercent,
+            onSave = { onSetCustomPercent(it); showCustomDialog = false },
+            onDismiss = { showCustomDialog = false }
+        )
+    }
+
+    val chipColors = FilterChipDefaults.filterChipColors(
+        selectedContainerColor = colors.operator,
+        selectedLabelColor = colors.operatorContent
+    )
+    val customLabel = if (customTipPercent == customTipPercent.toLong().toDouble())
+        "${customTipPercent.toLong()}%" else "${"%.1f".format(customTipPercent)}%"
+
     Column(
         modifier = Modifier
             .fillMaxWidth()
-            .padding(horizontal = 12.dp, vertical = 4.dp),
-        verticalArrangement = Arrangement.spacedBy(6.dp)
+            .padding(start = 12.dp, end = 12.dp, top = 0.dp, bottom = 4.dp),
+        verticalArrangement = Arrangement.spacedBy(0.dp)
     ) {
         Row(
             modifier = Modifier.fillMaxWidth(),
             horizontalArrangement = Arrangement.spacedBy(8.dp),
             verticalAlignment = Alignment.CenterVertically
         ) {
-            Text("Tip", color = colors.textSecondary, fontSize = 13.sp, modifier = Modifier.width(36.dp))
+            TooltipBox(
+                positionProvider = TooltipDefaults.rememberPlainTooltipPositionProvider(),
+                tooltip = { PlainTooltip { Text("The last option is your custom tip %. Tap to select it, tap again to change the value. You can also set it in Settings.") } },
+                state = tooltipState
+            ) {
+                IconButton(onClick = { scope.launch { tooltipState.show() } }) {
+                    Icon(Icons.Default.Info, contentDescription = "Custom tip info", tint = colors.textMuted, modifier = Modifier.size(18.dp))
+                }
+            }
             listOf(10.0, 15.0, 20.0).forEach { pct ->
                 FilterChip(
                     selected = tipPercent == pct,
                     onClick = { onSetPercent(pct) },
                     label = { Text("${pct.toInt()}%", fontSize = 13.sp) },
                     modifier = Modifier.weight(1f),
-                    colors = FilterChipDefaults.filterChipColors(
-                        selectedContainerColor = colors.operator,
-                        selectedLabelColor = colors.operatorContent
-                    )
+                    colors = chipColors
                 )
             }
+            FilterChip(
+                selected = tipPercent == customTipPercent,
+                onClick = {
+                    if (tipPercent == customTipPercent) showCustomDialog = true
+                    else onSetPercent(customTipPercent)
+                },
+                label = { Text(customLabel, fontSize = 13.sp) },
+                modifier = Modifier.weight(1f),
+                colors = chipColors
+            )
         }
         Row(
-            modifier = Modifier.fillMaxWidth(),
+            modifier = Modifier.fillMaxWidth().padding(top = 2.dp),
             horizontalArrangement = Arrangement.spacedBy(8.dp),
             verticalAlignment = Alignment.CenterVertically
         ) {
@@ -830,26 +871,69 @@ private fun TipControlsRow(
             OutlinedButton(
                 onClick = { onSetPeople(people - 1) },
                 enabled = people > 1,
-                modifier = Modifier.size(36.dp),
+                modifier = Modifier.size(28.dp),
                 contentPadding = PaddingValues(0.dp),
                 shape = CircleShape
-            ) { Text("−", fontSize = 18.sp) }
+            ) { Text("−", fontSize = 14.sp) }
             Text(
                 text = if (people == 1) "Just me" else "$people people",
                 color = colors.textPrimary,
-                fontSize = 14.sp,
+                fontSize = 13.sp,
                 modifier = Modifier.weight(1f),
                 textAlign = TextAlign.Center
             )
             OutlinedButton(
                 onClick = { onSetPeople(people + 1) },
                 enabled = people < 20,
-                modifier = Modifier.size(36.dp),
+                modifier = Modifier.size(28.dp),
                 contentPadding = PaddingValues(0.dp),
                 shape = CircleShape
-            ) { Text("+", fontSize = 18.sp) }
+            ) { Text("+", fontSize = 14.sp) }
         }
     }
+}
+
+// ── Custom tip % dialog ───────────────────────────────────────────────────────
+
+@Composable
+private fun CustomTipPercentDialog(current: Double, onSave: (Double) -> Unit, onDismiss: () -> Unit) {
+    val colors = LocalAppColors.current
+    var text by remember {
+        mutableStateOf(
+            if (current == current.toLong().toDouble()) current.toLong().toString()
+            else "%.1f".format(current)
+        )
+    }
+    val value = text.toDoubleOrNull()
+    val valid = value != null && value > 0 && value <= 100
+
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        containerColor = colors.surface,
+        title = { Text("Custom tip %", color = colors.textPrimary) },
+        text = {
+            OutlinedTextField(
+                value = text,
+                onValueChange = { text = it },
+                suffix = { Text("%", color = colors.textSecondary) },
+                keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal),
+                singleLine = true,
+                modifier = Modifier.fillMaxWidth(),
+                colors = OutlinedTextFieldDefaults.colors(
+                    focusedTextColor = colors.textPrimary,
+                    unfocusedTextColor = colors.textPrimary
+                )
+            )
+        },
+        confirmButton = {
+            TextButton(onClick = { value?.let { onSave(it) } }, enabled = valid) {
+                Text("Set", color = colors.fromAmountColor)
+            }
+        },
+        dismissButton = {
+            TextButton(onClick = onDismiss) { Text("Cancel", color = colors.textSecondary) }
+        }
+    )
 }
 
 // ── Tip breakdown display ─────────────────────────────────────────────────────

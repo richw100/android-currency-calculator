@@ -153,6 +153,15 @@ class ExchangeRateRepository(private val context: Context) {
     suspend fun loadDefaultTipPercent(): Double =
         context.dataStore.data.first()[defaultTipPercentKey]?.toDoubleOrNull() ?: 10.0
 
+    private val customTipPercentKey = stringPreferencesKey("custom_tip_percent")
+
+    suspend fun saveCustomTipPercent(percent: Double) {
+        context.dataStore.edit { it[customTipPercentKey] = percent.toString() }
+    }
+
+    suspend fun loadCustomTipPercent(): Double =
+        context.dataStore.data.first()[customTipPercentKey]?.toDoubleOrNull() ?: 12.5
+
     private val fuelUseUkGallonsKey = booleanPreferencesKey("fuel_use_uk_gallons")
 
     suspend fun saveFuelUseUkGallons(useUk: Boolean) {
