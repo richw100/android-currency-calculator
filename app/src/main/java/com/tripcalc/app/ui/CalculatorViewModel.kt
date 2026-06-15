@@ -86,7 +86,8 @@ data class CalculatorUiState(
     val fuelInputIsMpg: Boolean = true,
     val fuelUseUkGallons: Boolean = true,
     val swapZeroDot: Boolean = true,
-    val enabledModes: Set<ConversionMode> = ConversionMode.entries.toSet()
+    val enabledModes: Set<ConversionMode> = ConversionMode.entries.toSet(),
+    val cardMarkupPercent: Double = 0.0
 )
 
 sealed class CalculatorAction {
@@ -127,6 +128,7 @@ sealed class CalculatorAction {
     data class SetSwapZeroDot(val enabled: Boolean) : CalculatorAction()
     data class SetEnabledModes(val modes: Set<ConversionMode>) : CalculatorAction()
     data class SetDefaultTipPercent(val percent: Double) : CalculatorAction()
+    data class SetCardMarkupPercent(val percent: Double) : CalculatorAction()
     object SendTipShareToFX : CalculatorAction()
 }
 
@@ -168,7 +170,8 @@ class CalculatorViewModel(application: Application) : AndroidViewModel(applicati
             val swapZeroDot = repository.loadSwapZeroDot()
             val enabledModes = repository.loadEnabledModes()
             val enabledDistancePairs = repository.loadEnabledDistancePairs()
-            _uiState.update { it.copy(toCurrency = to, fromCurrency = from, recentCurrencies = recents, customRates = customRates, hapticEnabled = hapticEnabled, history = history, darkModePref = darkModePref, accentScheme = accentScheme, defaultTipPercent = defaultTipPercent, tipPercent = defaultTipPercent, customTipPercent = customTipPercent, fuelUseUkGallons = fuelUseUkGallons, swapZeroDot = swapZeroDot, enabledModes = enabledModes, enabledDistancePairs = enabledDistancePairs) }
+            val cardMarkupPercent = repository.loadCardMarkupPercent()
+            _uiState.update { it.copy(toCurrency = to, fromCurrency = from, recentCurrencies = recents, customRates = customRates, hapticEnabled = hapticEnabled, history = history, darkModePref = darkModePref, accentScheme = accentScheme, defaultTipPercent = defaultTipPercent, tipPercent = defaultTipPercent, customTipPercent = customTipPercent, fuelUseUkGallons = fuelUseUkGallons, swapZeroDot = swapZeroDot, enabledModes = enabledModes, enabledDistancePairs = enabledDistancePairs, cardMarkupPercent = cardMarkupPercent) }
             fetchRates(forceRefresh = false)
         }
     }
@@ -368,6 +371,11 @@ class CalculatorViewModel(application: Application) : AndroidViewModel(applicati
                 _uiState.update { it.copy(defaultTipPercent = action.percent, tipPercent = action.percent) }
                 viewModelScope.launch { repository.saveDefaultTipPercent(action.percent) }
                 updateDisplay(); return
+            }
+            is CalculatorAction.SetCardMarkupPercent -> {
+                _uiState.update { it.copy(cardMarkupPercent = action.percent) }
+                viewModelScope.launch { repository.saveCardMarkupPercent(action.percent) }
+                updateCurrencyDisplay(); return
             }
             is CalculatorAction.DeleteHistoryEntry -> {
                 val updated = _uiState.value.history.filter { it.timestamp != action.timestamp }
@@ -658,12 +666,15 @@ class CalculatorViewModel(application: Application) : AndroidViewModel(applicati
         val toRate = effectiveUsdRate(state.toCurrency, state)
 
         if (fromRate != null && toRate != null && fromRate != 0.0) {
-            val toValue = value * toRate / fromRate
+            val markupFactor = 1.0 + state.cardMarkupPercent / 100.0
+            val toValue = value * toRate / fromRate * markupFactor
             val fromName = try { JavaCurrency.getInstance(state.fromCurrency).displayName } catch (e: Exception) { state.fromCurrency }
             val toName = try { JavaCurrency.getInstance(state.toCurrency).displayName } catch (e: Exception) { state.toCurrency }
             val usingCustom = state.customRates.containsKey(state.fromCurrency) || state.customRates.containsKey(state.toCurrency)
+            val markupLabel = if (state.cardMarkupPercent > 0)
+                "  •  +${"%.2f".format(state.cardMarkupPercent).trimEnd('0').trimEnd('.')}% card fee" else ""
             val rateLabel = "1 ${state.fromCurrency} ($fromName) = ${"%.4f".format(toRate / fromRate)} ${state.toCurrency} ($toName)" +
-                if (usingCustom) " ★" else ""
+                (if (usingCustom) " ★" else "") + markupLabel
             val pctDiff = if (usingCustom) {
                 val liveFrom = rates[state.fromCurrency]
                 val liveTo = rates[state.toCurrency]

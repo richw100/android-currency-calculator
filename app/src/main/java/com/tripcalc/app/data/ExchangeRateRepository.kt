@@ -208,4 +208,13 @@ class ExchangeRateRepository(private val context: Context) {
         return names.mapNotNull { name -> DistancePair.entries.find { it.name == name } }.toSet()
             .ifEmpty { setOf(DistancePair.MILES_KM) }
     }
+
+    private val cardMarkupPercentKey = stringPreferencesKey("card_markup_percent")
+
+    suspend fun saveCardMarkupPercent(percent: Double) {
+        context.dataStore.edit { it[cardMarkupPercentKey] = percent.toString() }
+    }
+
+    suspend fun loadCardMarkupPercent(): Double =
+        context.dataStore.data.first()[cardMarkupPercentKey]?.toDoubleOrNull() ?: 0.0
 }

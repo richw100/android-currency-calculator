@@ -51,6 +51,7 @@ import kotlin.math.abs
 import kotlinx.coroutines.launch
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.viewmodel.compose.viewModel
+import com.tripcalc.app.BuildConfig
 import com.tripcalc.app.R
 import com.tripcalc.app.ui.theme.CalcAppTheme
 
@@ -205,7 +206,7 @@ fun AboutScreen(modifier: Modifier = Modifier) {
         Spacer(Modifier.height(20.dp))
 
         Text(text = "TripCalc", color = colors.textPrimary, fontSize = 26.sp, fontWeight = FontWeight.Bold)
-        Text(text = "Version 1.0", color = colors.textSecondary, fontSize = 13.sp)
+        Text(text = "Version ${BuildConfig.VERSION_NAME}", color = colors.textSecondary, fontSize = 13.sp)
 
         Spacer(Modifier.height(32.dp))
 
@@ -308,7 +309,7 @@ fun CalculatorScreen(vm: CalculatorViewModel = viewModel(), modifier: Modifier =
         )
     }
 
-    Column(modifier = modifier.fillMaxWidth().verticalScroll(rememberScrollState())) {
+    Column(modifier = modifier.fillMaxSize()) {
         // Mode toggle — only show enabled modes (CURRENCY always first)
         val visibleModes = ConversionMode.entries.filter { it in state.enabledModes }
         val segmentColors = SegmentedButtonDefaults.colors(
@@ -330,7 +331,7 @@ fun CalculatorScreen(vm: CalculatorViewModel = viewModel(), modifier: Modifier =
                     onClick = { vm.onAction(CalculatorAction.SetConversionMode(mode)) },
                     shape = SegmentedButtonDefaults.itemShape(index = index, count = visibleModes.size),
                     colors = segmentColors
-                ) { Text(mode.tabLabel, fontSize = 11.sp) }
+                ) { Text(mode.tabLabel, fontSize = 11.sp, maxLines = 1, overflow = TextOverflow.Ellipsis) }
             }
         }
 
@@ -566,12 +567,12 @@ fun CalculatorScreen(vm: CalculatorViewModel = viewModel(), modifier: Modifier =
                 }
             }
         }
-        // Button grid
+        // Button grid — weight(1f) fills all remaining vertical space
         ButtonGrid(
             onAction = vm::onAction,
             hapticEnabled = state.hapticEnabled,
             swapZeroDot = state.swapZeroDot,
-            modifier = Modifier.padding(start = 8.dp, top = 2.dp, end = 8.dp, bottom = 2.dp)
+            modifier = Modifier.weight(1f).padding(start = 8.dp, top = 2.dp, end = 8.dp, bottom = 2.dp)
         )
 
         OutlinedButton(
@@ -583,8 +584,6 @@ fun CalculatorScreen(vm: CalculatorViewModel = viewModel(), modifier: Modifier =
         ) {
             Text(text = "Like using this ad-free app? Buy me a coffee to say thanks! ☕", fontSize = 11.sp, textAlign = TextAlign.Center)
         }
-
-        Spacer(Modifier.height(4.dp))
     }
 }
 
@@ -1193,9 +1192,9 @@ fun ButtonGrid(onAction: (CalculatorAction) -> Unit, hapticEnabled: Boolean = tr
         )
     )
 
-    Column(modifier = modifier) {
+    Column(modifier = modifier, verticalArrangement = Arrangement.spacedBy(8.dp)) {
         rows.forEach { row ->
-            Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+            Row(modifier = Modifier.weight(1f).fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                 row.forEach { btn ->
                     CalcButton(
                         label = btn.label, bg = btn.bg, fg = btn.fg,
@@ -1205,10 +1204,9 @@ fun ButtonGrid(onAction: (CalculatorAction) -> Unit, hapticEnabled: Boolean = tr
                     )
                 }
             }
-            Spacer(modifier = Modifier.height(8.dp))
         }
         // Bottom row: 0, ., ⌫, = (order of first two swappable via setting)
-        Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+        Row(modifier = Modifier.weight(1f).fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
             val firstLabel  = if (swapZeroDot) "." else "0"
             val secondLabel = if (swapZeroDot) "0" else "."
             val firstAction  = if (swapZeroDot) CalculatorAction.Decimal else CalculatorAction.Digit(0)
@@ -1218,7 +1216,6 @@ fun ButtonGrid(onAction: (CalculatorAction) -> Unit, hapticEnabled: Boolean = tr
             CalcButton("⌫", colors.buttonDigit, fg = colors.buttonDigitContent, hapticEnabled = hapticEnabled, onClick = { onAction(CalculatorAction.Delete) },     modifier = Modifier.weight(1f))
             CalcButton("=", colors.equals,      fg = colors.equalsContent,      hapticEnabled = hapticEnabled, onClick = { onAction(CalculatorAction.Calculate) },  modifier = Modifier.weight(1f))
         }
-        Spacer(modifier = Modifier.height(8.dp))
     }
 }
 
@@ -1249,7 +1246,7 @@ fun CalcButton(
             }
             onClick()
         },
-        modifier = modifier.height(72.dp),
+        modifier = modifier.fillMaxHeight(),
         shape = CircleShape,
         colors = ButtonDefaults.buttonColors(containerColor = bg, contentColor = fg),
         contentPadding = PaddingValues(0.dp)

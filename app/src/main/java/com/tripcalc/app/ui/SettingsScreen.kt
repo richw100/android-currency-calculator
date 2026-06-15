@@ -3,6 +3,7 @@ package com.tripcalc.app.ui
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.background
+import kotlin.math.roundToInt
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
@@ -134,6 +135,68 @@ fun SettingsScreen(vm: CalculatorViewModel, modifier: Modifier = Modifier) {
             Icon(Icons.Default.Add, null, modifier = Modifier.size(18.dp))
             Spacer(Modifier.width(8.dp))
             Text("Add custom rate", fontSize = 15.sp, modifier = Modifier.padding(vertical = 4.dp))
+        }
+
+        Spacer(Modifier.height(16.dp))
+
+        Card(modifier = Modifier.fillMaxWidth(), colors = CardDefaults.cardColors(containerColor = colors.surface)) {
+            Column(modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 12.dp)) {
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Column(modifier = Modifier.weight(1f)) {
+                        Text("Card fee markup", color = colors.textPrimary, fontSize = 15.sp)
+                        Text("Add your card's foreign transaction fee to conversions", color = colors.textSecondary, fontSize = 12.sp)
+                    }
+                    Text(
+                        text = if (state.cardMarkupPercent == 0.0) "Off"
+                               else "${"%.2f".format(state.cardMarkupPercent).trimEnd('0').trimEnd('.')}%",
+                        color = if (state.cardMarkupPercent > 0) colors.warningColor else colors.textMuted,
+                        fontSize = 14.sp,
+                        fontWeight = androidx.compose.ui.text.font.FontWeight.Medium
+                    )
+                }
+                Slider(
+                    value = state.cardMarkupPercent.toFloat(),
+                    onValueChange = {
+                        val snapped = ((it / 0.25f).roundToInt() * 0.25).coerceIn(0.0, 5.0)
+                        vm.onAction(CalculatorAction.SetCardMarkupPercent(snapped))
+                    },
+                    valueRange = 0f..5f,
+                    steps = 19,
+                    colors = SliderDefaults.colors(
+                        thumbColor = colors.operator,
+                        activeTrackColor = colors.operator,
+                        inactiveTrackColor = colors.divider
+                    )
+                )
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.SpaceBetween
+                ) {
+                    Text("0% (off)", fontSize = 11.sp, color = colors.textMuted)
+                    Text("5%", fontSize = 11.sp, color = colors.textMuted)
+                }
+            }
+
+            HorizontalDivider(modifier = Modifier.padding(horizontal = 16.dp), color = colors.divider)
+
+            Row(
+                modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 12.dp),
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Column(modifier = Modifier.weight(1f)) {
+                    Text("Exchange rates", color = colors.textPrimary, fontSize = 15.sp)
+                    Text(
+                        text = if (state.isOffline) "Offline — using cached rates" else state.lastUpdated,
+                        color = if (state.isOffline) colors.warningColor else colors.textSecondary,
+                        fontSize = 12.sp
+                    )
+                }
+                Text(
+                    text = "${state.availableCurrencies.size} currencies",
+                    color = colors.textMuted,
+                    fontSize = 12.sp
+                )
+            }
         }
 
         Spacer(Modifier.height(24.dp))
@@ -384,26 +447,6 @@ fun SettingsScreen(vm: CalculatorViewModel, modifier: Modifier = Modifier) {
                 }
             }
 
-            HorizontalDivider(modifier = Modifier.padding(horizontal = 16.dp), color = colors.divider)
-
-            Row(
-                modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 12.dp),
-                verticalAlignment = Alignment.CenterVertically
-            ) {
-                Column(modifier = Modifier.weight(1f)) {
-                    Text("Exchange rates", color = colors.textPrimary, fontSize = 15.sp)
-                    Text(
-                        text = if (state.isOffline) "Offline — using cached rates" else state.lastUpdated,
-                        color = if (state.isOffline) colors.warningColor else colors.textSecondary,
-                        fontSize = 12.sp
-                    )
-                }
-                Text(
-                    text = "${state.availableCurrencies.size} currencies",
-                    color = colors.textMuted,
-                    fontSize = 12.sp
-                )
-            }
         }
 
     }
