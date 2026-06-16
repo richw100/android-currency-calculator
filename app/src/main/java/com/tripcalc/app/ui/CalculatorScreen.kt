@@ -139,6 +139,11 @@ fun AppScreen() {
                                 onDismissRequest = { menuExpanded = false }
                             ) {
                                 DropdownMenuItem(
+                                    text = { Text("Size Converter") },
+                                    leadingIcon = { Icon(Icons.Default.Checkroom, null) },
+                                    onClick = { screen = Screen.Converter; menuExpanded = false }
+                                )
+                                DropdownMenuItem(
                                     text = { Text("History") },
                                     leadingIcon = { Icon(Icons.Default.History, null) },
                                     onClick = { screen = Screen.History; menuExpanded = false }
@@ -147,11 +152,6 @@ fun AppScreen() {
                                     text = { Text("Settings") },
                                     leadingIcon = { Icon(Icons.Default.Settings, null) },
                                     onClick = { screen = Screen.Settings; menuExpanded = false }
-                                )
-                                DropdownMenuItem(
-                                    text = { Text("Size Converter") },
-                                    leadingIcon = { Icon(Icons.Default.Checkroom, null) },
-                                    onClick = { screen = Screen.Converter; menuExpanded = false }
                                 )
                                 DropdownMenuItem(
                                     text = { Text("About") },
