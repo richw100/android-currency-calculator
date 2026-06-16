@@ -590,7 +590,7 @@ fun CalculatorScreen(vm: CalculatorViewModel = viewModel(), modifier: Modifier =
             colors = ButtonDefaults.outlinedButtonColors(contentColor = colors.promoColor),
             border = androidx.compose.foundation.BorderStroke(1.dp, colors.promoColor)
         ) {
-            Text(text = "Like using this ad-free app? Buy me a coffee to say thanks! ☕", fontSize = 11.sp, textAlign = TextAlign.Center)
+            Text(text = "Like using this ad-free app? Buy me a coffee to say thanks! ☕", fontSize = 11.sp, textAlign = TextAlign.Center, maxLines = 1, overflow = TextOverflow.Ellipsis)
         }
     }
 }
