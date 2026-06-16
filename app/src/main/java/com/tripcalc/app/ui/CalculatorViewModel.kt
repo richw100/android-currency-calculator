@@ -38,6 +38,79 @@ enum class TempUnit(val label: String, val abbr: String) {
     FAHRENHEIT("Fahrenheit", "°F")
 }
 
+enum class SizeCategory(val label: String) {
+    SHOE("Shoes"), WOMENS("Women's"), MENS("Men's")
+}
+
+data class SizeCountry(val key: String, val displayName: String, val unit: String = "")
+
+internal val SHOE_COUNTRIES = listOf(
+    SizeCountry("EU", "EU"), SizeCountry("UK", "UK"), SizeCountry("US", "US"),
+    SizeCountry("JP", "Japan", "cm"), SizeCountry("AU", "Australia"), SizeCountry("KR", "Korea", "mm")
+)
+internal val WOMENS_COUNTRIES = listOf(
+    SizeCountry("US", "US"), SizeCountry("UK", "UK"), SizeCountry("EU", "EU"),
+    SizeCountry("FR", "France"), SizeCountry("IT", "Italy"), SizeCountry("AU", "Australia"), SizeCountry("JP", "Japan")
+)
+internal val MENS_COUNTRIES = listOf(
+    SizeCountry("US/UK", "US / UK"), SizeCountry("EU", "EU"),
+    SizeCountry("JP", "Japan"), SizeCountry("AU", "Australia")
+)
+
+internal val MEN_SHOE_TABLE: List<Map<String, String>> = listOf(
+    mapOf("EU" to "38",   "UK" to "5",    "US" to "6",    "JP" to "24.0", "AU" to "5",    "KR" to "240"),
+    mapOf("EU" to "39",   "UK" to "6",    "US" to "7",    "JP" to "24.5", "AU" to "6",    "KR" to "245"),
+    mapOf("EU" to "40",   "UK" to "6.5",  "US" to "7.5",  "JP" to "25.0", "AU" to "6.5",  "KR" to "250"),
+    mapOf("EU" to "41",   "UK" to "7",    "US" to "8",    "JP" to "25.5", "AU" to "7",    "KR" to "255"),
+    mapOf("EU" to "42",   "UK" to "8",    "US" to "9",    "JP" to "26.0", "AU" to "8",    "KR" to "260"),
+    mapOf("EU" to "43",   "UK" to "9",    "US" to "10",   "JP" to "27.0", "AU" to "9",    "KR" to "270"),
+    mapOf("EU" to "44",   "UK" to "9.5",  "US" to "10.5", "JP" to "27.5", "AU" to "9.5",  "KR" to "275"),
+    mapOf("EU" to "45",   "UK" to "10.5", "US" to "11.5", "JP" to "28.0", "AU" to "10.5", "KR" to "280"),
+    mapOf("EU" to "46",   "UK" to "11",   "US" to "12",   "JP" to "29.0", "AU" to "11",   "KR" to "290"),
+    mapOf("EU" to "47",   "UK" to "12",   "US" to "13",   "JP" to "30.0", "AU" to "12",   "KR" to "300"),
+    mapOf("EU" to "48",   "UK" to "13",   "US" to "14",   "JP" to "31.0", "AU" to "13",   "KR" to "310"),
+)
+internal val WOMEN_SHOE_TABLE: List<Map<String, String>> = listOf(
+    mapOf("EU" to "35",   "UK" to "2",   "US" to "4",   "JP" to "21.5", "AU" to "2",   "KR" to "215"),
+    mapOf("EU" to "35.5", "UK" to "2.5", "US" to "4.5", "JP" to "22.0", "AU" to "2.5", "KR" to "220"),
+    mapOf("EU" to "36",   "UK" to "3",   "US" to "5",   "JP" to "22.5", "AU" to "3",   "KR" to "225"),
+    mapOf("EU" to "36.5", "UK" to "3.5", "US" to "5.5", "JP" to "23.0", "AU" to "3.5", "KR" to "230"),
+    mapOf("EU" to "37",   "UK" to "4",   "US" to "6",   "JP" to "23.0", "AU" to "4",   "KR" to "235"),
+    mapOf("EU" to "37.5", "UK" to "4.5", "US" to "6.5", "JP" to "23.5", "AU" to "4.5", "KR" to "235"),
+    mapOf("EU" to "38",   "UK" to "5",   "US" to "7",   "JP" to "24.0", "AU" to "5",   "KR" to "240"),
+    mapOf("EU" to "38.5", "UK" to "5.5", "US" to "7.5", "JP" to "24.0", "AU" to "5.5", "KR" to "245"),
+    mapOf("EU" to "39",   "UK" to "6",   "US" to "8",   "JP" to "24.5", "AU" to "6",   "KR" to "245"),
+    mapOf("EU" to "40",   "UK" to "6.5", "US" to "8.5", "JP" to "25.0", "AU" to "6.5", "KR" to "250"),
+    mapOf("EU" to "40.5", "UK" to "7",   "US" to "9",   "JP" to "25.5", "AU" to "7",   "KR" to "255"),
+    mapOf("EU" to "41",   "UK" to "7.5", "US" to "9.5", "JP" to "25.5", "AU" to "7.5", "KR" to "260"),
+    mapOf("EU" to "42",   "UK" to "8",   "US" to "10",  "JP" to "26.0", "AU" to "8",   "KR" to "265"),
+)
+internal val WOMENS_CLOTHING_TABLE: List<Map<String, String>> = listOf(
+    mapOf("US" to "0",  "UK" to "4",  "EU" to "32", "FR" to "34", "IT" to "36", "AU" to "4",  "JP" to "5"),
+    mapOf("US" to "2",  "UK" to "6",  "EU" to "34", "FR" to "36", "IT" to "38", "AU" to "6",  "JP" to "7"),
+    mapOf("US" to "4",  "UK" to "8",  "EU" to "36", "FR" to "38", "IT" to "40", "AU" to "8",  "JP" to "9"),
+    mapOf("US" to "6",  "UK" to "10", "EU" to "38", "FR" to "40", "IT" to "42", "AU" to "10", "JP" to "11"),
+    mapOf("US" to "8",  "UK" to "12", "EU" to "40", "FR" to "42", "IT" to "44", "AU" to "12", "JP" to "13"),
+    mapOf("US" to "10", "UK" to "14", "EU" to "42", "FR" to "44", "IT" to "46", "AU" to "14", "JP" to "15"),
+    mapOf("US" to "12", "UK" to "16", "EU" to "44", "FR" to "46", "IT" to "48", "AU" to "16", "JP" to "17"),
+    mapOf("US" to "14", "UK" to "18", "EU" to "46", "FR" to "48", "IT" to "50", "AU" to "18", "JP" to "19"),
+    mapOf("US" to "16", "UK" to "20", "EU" to "48", "FR" to "50", "IT" to "52", "AU" to "20", "JP" to "21"),
+    mapOf("US" to "18", "UK" to "22", "EU" to "50", "FR" to "52", "IT" to "54", "AU" to "22", "JP" to "23"),
+    mapOf("US" to "20", "UK" to "24", "EU" to "52", "FR" to "54", "IT" to "56", "AU" to "24", "JP" to "25"),
+)
+internal val MENS_CLOTHING_TABLE: List<Map<String, String>> = listOf(
+    mapOf("US/UK" to "XS",  "EU" to "44", "JP" to "S",   "AU" to "XS"),
+    mapOf("US/UK" to "S",   "EU" to "46", "JP" to "M",   "AU" to "S"),
+    mapOf("US/UK" to "M",   "EU" to "48", "JP" to "L",   "AU" to "M"),
+    mapOf("US/UK" to "L",   "EU" to "50", "JP" to "XL",  "AU" to "L"),
+    mapOf("US/UK" to "XL",  "EU" to "52", "JP" to "XXL", "AU" to "XL"),
+    mapOf("US/UK" to "XXL", "EU" to "54", "JP" to "3XL", "AU" to "XXL"),
+    mapOf("US/UK" to "3XL", "EU" to "56", "JP" to "4XL", "AU" to "3XL"),
+)
+
+fun lookupSize(table: List<Map<String, String>>, fromKey: String, toKey: String, fromValue: String): String? =
+    table.find { it[fromKey] == fromValue }?.get(toKey)
+
 
 data class CustomRateEntry(val base: String, val rate: Double)
 
@@ -87,7 +160,15 @@ data class CalculatorUiState(
     val fuelUseUkGallons: Boolean = true,
     val swapZeroDot: Boolean = true,
     val enabledModes: Set<ConversionMode> = ConversionMode.entries.toSet(),
-    val cardMarkupPercent: Double = 0.0
+    val cardMarkupPercent: Double = 0.0,
+    val sizeCategory: SizeCategory = SizeCategory.SHOE,
+    val shoeIsMens: Boolean = true,
+    val shoeFromCountry: String = "EU",
+    val shoeToCountry: String = "UK",
+    val womensFromCountry: String = "US",
+    val womensToCountry: String = "UK",
+    val mensFromCountry: String = "US/UK",
+    val mensToCountry: String = "EU"
 )
 
 sealed class CalculatorAction {
@@ -130,6 +211,11 @@ sealed class CalculatorAction {
     data class SetDefaultTipPercent(val percent: Double) : CalculatorAction()
     data class SetCardMarkupPercent(val percent: Double) : CalculatorAction()
     object SendTipShareToFX : CalculatorAction()
+    data class SetSizeCategory(val category: SizeCategory) : CalculatorAction()
+    data class SetShoeIsMens(val isMens: Boolean) : CalculatorAction()
+    data class SetShoeCountries(val from: String, val to: String) : CalculatorAction()
+    data class SetWomensCountries(val from: String, val to: String) : CalculatorAction()
+    data class SetMensCountries(val from: String, val to: String) : CalculatorAction()
 }
 
 private data class BracketState(val firstOperand: Double?, val pendingOp: Char?)
@@ -171,7 +257,12 @@ class CalculatorViewModel(application: Application) : AndroidViewModel(applicati
             val enabledModes = repository.loadEnabledModes()
             val enabledDistancePairs = repository.loadEnabledDistancePairs()
             val cardMarkupPercent = repository.loadCardMarkupPercent()
-            _uiState.update { it.copy(toCurrency = to, fromCurrency = from, recentCurrencies = recents, customRates = customRates, hapticEnabled = hapticEnabled, history = history, darkModePref = darkModePref, accentScheme = accentScheme, defaultTipPercent = defaultTipPercent, tipPercent = defaultTipPercent, customTipPercent = customTipPercent, fuelUseUkGallons = fuelUseUkGallons, swapZeroDot = swapZeroDot, enabledModes = enabledModes, enabledDistancePairs = enabledDistancePairs, cardMarkupPercent = cardMarkupPercent) }
+            val sizeCategory = repository.loadSizeCategory()
+            val shoeIsMens = repository.loadShoeIsMens()
+            val (shoeFrom, shoeTo) = repository.loadShoeCountries()
+            val (womensFrom, womensTo) = repository.loadWomensCountries()
+            val (mensFrom, mensTo) = repository.loadMensCountries()
+            _uiState.update { it.copy(toCurrency = to, fromCurrency = from, recentCurrencies = recents, customRates = customRates, hapticEnabled = hapticEnabled, history = history, darkModePref = darkModePref, accentScheme = accentScheme, defaultTipPercent = defaultTipPercent, tipPercent = defaultTipPercent, customTipPercent = customTipPercent, fuelUseUkGallons = fuelUseUkGallons, swapZeroDot = swapZeroDot, enabledModes = enabledModes, enabledDistancePairs = enabledDistancePairs, cardMarkupPercent = cardMarkupPercent, sizeCategory = sizeCategory, shoeIsMens = shoeIsMens, shoeFromCountry = shoeFrom, shoeToCountry = shoeTo, womensFromCountry = womensFrom, womensToCountry = womensTo, mensFromCountry = mensFrom, mensToCountry = mensTo) }
             fetchRates(forceRefresh = false)
         }
     }
@@ -376,6 +467,31 @@ class CalculatorViewModel(application: Application) : AndroidViewModel(applicati
                 _uiState.update { it.copy(cardMarkupPercent = action.percent) }
                 viewModelScope.launch { repository.saveCardMarkupPercent(action.percent) }
                 updateCurrencyDisplay(); return
+            }
+            is CalculatorAction.SetSizeCategory -> {
+                _uiState.update { it.copy(sizeCategory = action.category) }
+                viewModelScope.launch { repository.saveSizeCategory(action.category) }
+                return
+            }
+            is CalculatorAction.SetShoeIsMens -> {
+                _uiState.update { it.copy(shoeIsMens = action.isMens) }
+                viewModelScope.launch { repository.saveShoeIsMens(action.isMens) }
+                return
+            }
+            is CalculatorAction.SetShoeCountries -> {
+                _uiState.update { it.copy(shoeFromCountry = action.from, shoeToCountry = action.to) }
+                viewModelScope.launch { repository.saveShoeCountries(action.from, action.to) }
+                return
+            }
+            is CalculatorAction.SetWomensCountries -> {
+                _uiState.update { it.copy(womensFromCountry = action.from, womensToCountry = action.to) }
+                viewModelScope.launch { repository.saveWomensCountries(action.from, action.to) }
+                return
+            }
+            is CalculatorAction.SetMensCountries -> {
+                _uiState.update { it.copy(mensFromCountry = action.from, mensToCountry = action.to) }
+                viewModelScope.launch { repository.saveMensCountries(action.from, action.to) }
+                return
             }
             is CalculatorAction.DeleteHistoryEntry -> {
                 val updated = _uiState.value.history.filter { it.timestamp != action.timestamp }

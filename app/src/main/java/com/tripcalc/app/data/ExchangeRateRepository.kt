@@ -11,6 +11,7 @@ import androidx.datastore.preferences.core.stringSetPreferencesKey
 import androidx.datastore.preferences.preferencesDataStore
 import com.tripcalc.app.ui.AccentScheme
 import com.tripcalc.app.ui.ConversionMode
+import com.tripcalc.app.ui.SizeCategory
 import com.tripcalc.app.ui.DistancePair
 import com.tripcalc.app.ui.CustomRateEntry
 import com.tripcalc.app.ui.DarkModePref
@@ -217,4 +218,56 @@ class ExchangeRateRepository(private val context: Context) {
 
     suspend fun loadCardMarkupPercent(): Double =
         context.dataStore.data.first()[cardMarkupPercentKey]?.toDoubleOrNull() ?: 0.0
+
+    private val sizeCategoryKey = stringPreferencesKey("size_category")
+    private val shoeIsMensKey = booleanPreferencesKey("shoe_is_mens")
+    private val shoeFromKey = stringPreferencesKey("shoe_from_country")
+    private val shoeToKey = stringPreferencesKey("shoe_to_country")
+    private val womensFromKey = stringPreferencesKey("womens_from_country")
+    private val womensTokKey = stringPreferencesKey("womens_to_country")
+    private val mensFromKey = stringPreferencesKey("mens_from_country")
+    private val mensToKey = stringPreferencesKey("mens_to_country")
+
+    suspend fun saveSizeCategory(category: SizeCategory) {
+        context.dataStore.edit { it[sizeCategoryKey] = category.name }
+    }
+
+    suspend fun loadSizeCategory(): SizeCategory {
+        val name = context.dataStore.data.first()[sizeCategoryKey] ?: return SizeCategory.SHOE
+        return try { SizeCategory.valueOf(name) } catch (e: Exception) { SizeCategory.SHOE }
+    }
+
+    suspend fun saveShoeIsMens(isMens: Boolean) {
+        context.dataStore.edit { it[shoeIsMensKey] = isMens }
+    }
+
+    suspend fun loadShoeIsMens(): Boolean =
+        context.dataStore.data.first()[shoeIsMensKey] ?: true
+
+    suspend fun saveShoeCountries(from: String, to: String) {
+        context.dataStore.edit { it[shoeFromKey] = from; it[shoeToKey] = to }
+    }
+
+    suspend fun loadShoeCountries(): Pair<String, String> {
+        val prefs = context.dataStore.data.first()
+        return Pair(prefs[shoeFromKey] ?: "EU", prefs[shoeToKey] ?: "UK")
+    }
+
+    suspend fun saveWomensCountries(from: String, to: String) {
+        context.dataStore.edit { it[womensFromKey] = from; it[womensTokKey] = to }
+    }
+
+    suspend fun loadWomensCountries(): Pair<String, String> {
+        val prefs = context.dataStore.data.first()
+        return Pair(prefs[womensFromKey] ?: "US", prefs[womensTokKey] ?: "UK")
+    }
+
+    suspend fun saveMensCountries(from: String, to: String) {
+        context.dataStore.edit { it[mensFromKey] = from; it[mensToKey] = to }
+    }
+
+    suspend fun loadMensCountries(): Pair<String, String> {
+        val prefs = context.dataStore.data.first()
+        return Pair(prefs[mensFromKey] ?: "US/UK", prefs[mensToKey] ?: "EU")
+    }
 }

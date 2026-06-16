@@ -10,6 +10,7 @@ import androidx.compose.foundation.combinedClickable
 import androidx.compose.foundation.isSystemInDarkTheme
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
@@ -23,6 +24,7 @@ import androidx.compose.material.icons.filled.Menu
 import androidx.compose.material.icons.filled.Refresh
 import androidx.compose.material.icons.filled.Settings
 import androidx.compose.material.icons.filled.SwapHoriz
+import androidx.compose.material.icons.filled.Checkroom
 import androidx.compose.material.icons.filled.WifiOff
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
@@ -74,7 +76,7 @@ fun currencyName(code: String) = currencyNameCache.getOrPut(code) {
 
 // ── Root composable ──────────────────────────────────────────────────────────
 
-private enum class Screen { Calculator, History, Settings, About }
+private enum class Screen { Calculator, History, Settings, About, Converter }
 
 @Composable
 fun AppScreen() {
@@ -147,6 +149,11 @@ fun AppScreen() {
                                     onClick = { screen = Screen.Settings; menuExpanded = false }
                                 )
                                 DropdownMenuItem(
+                                    text = { Text("Size Converter") },
+                                    leadingIcon = { Icon(Icons.Default.Checkroom, null) },
+                                    onClick = { screen = Screen.Converter; menuExpanded = false }
+                                )
+                                DropdownMenuItem(
                                     text = { Text("About") },
                                     leadingIcon = { Icon(Icons.Default.Info, null) },
                                     onClick = { screen = Screen.About; menuExpanded = false }
@@ -167,6 +174,7 @@ fun AppScreen() {
                     Screen.History    -> HistoryScreen(vm = vm, modifier = Modifier.weight(1f), onEntryRestored = { screen = Screen.Calculator })
                     Screen.About      -> AboutScreen(modifier = Modifier.weight(1f))
                     Screen.Settings   -> SettingsScreen(vm = vm, modifier = Modifier.weight(1f))
+                    Screen.Converter  -> SizeConverterScreen(vm = vm, modifier = Modifier.weight(1f))
                 }
             }
         }
@@ -1215,6 +1223,276 @@ fun ButtonGrid(onAction: (CalculatorAction) -> Unit, hapticEnabled: Boolean = tr
             CalcButton(secondLabel, colors.buttonDigit, fg = colors.buttonDigitContent, hapticEnabled = hapticEnabled, onClick = { onAction(secondAction) }, modifier = Modifier.weight(1f))
             CalcButton("⌫", colors.buttonDigit, fg = colors.buttonDigitContent, hapticEnabled = hapticEnabled, onClick = { onAction(CalculatorAction.Delete) },     modifier = Modifier.weight(1f))
             CalcButton("=", colors.equals,      fg = colors.equalsContent,      hapticEnabled = hapticEnabled, onClick = { onAction(CalculatorAction.Calculate) },  modifier = Modifier.weight(1f))
+        }
+    }
+}
+
+// ── Size converter screen ─────────────────────────────────────────────────────
+
+@Composable
+fun SizeConverterScreen(vm: CalculatorViewModel = viewModel(), modifier: Modifier = Modifier) {
+    val state by vm.uiState.collectAsStateWithLifecycle()
+    val colors = LocalAppColors.current
+
+    val table: List<Map<String, String>>
+    val countries: List<SizeCountry>
+    val fromCountry: String
+    val toCountry: String
+
+    when (state.sizeCategory) {
+        SizeCategory.SHOE -> {
+            table = if (state.shoeIsMens) MEN_SHOE_TABLE else WOMEN_SHOE_TABLE
+            countries = SHOE_COUNTRIES
+            fromCountry = state.shoeFromCountry
+            toCountry = state.shoeToCountry
+        }
+        SizeCategory.WOMENS -> {
+            table = WOMENS_CLOTHING_TABLE
+            countries = WOMENS_COUNTRIES
+            fromCountry = state.womensFromCountry
+            toCountry = state.womensToCountry
+        }
+        SizeCategory.MENS -> {
+            table = MENS_CLOTHING_TABLE
+            countries = MENS_COUNTRIES
+            fromCountry = state.mensFromCountry
+            toCountry = state.mensToCountry
+        }
+    }
+
+    var selectedSize by remember(state.sizeCategory, state.shoeIsMens, fromCountry) { mutableStateOf("") }
+    val availableSizes = remember(table, fromCountry) { table.mapNotNull { it[fromCountry] } }
+    val result = if (selectedSize.isNotEmpty()) lookupSize(table, fromCountry, toCountry, selectedSize) else null
+    val fromDef = countries.find { it.key == fromCountry }
+    val toDef = countries.find { it.key == toCountry }
+
+    fun setCountries(from: String, to: String) = when (state.sizeCategory) {
+        SizeCategory.SHOE   -> vm.onAction(CalculatorAction.SetShoeCountries(from, to))
+        SizeCategory.WOMENS -> vm.onAction(CalculatorAction.SetWomensCountries(from, to))
+        SizeCategory.MENS   -> vm.onAction(CalculatorAction.SetMensCountries(from, to))
+    }
+
+    Column(
+        modifier = modifier
+            .fillMaxSize()
+            .verticalScroll(rememberScrollState())
+            .padding(horizontal = 12.dp)
+    ) {
+        Spacer(Modifier.height(8.dp))
+
+        Text(
+            "Clothing & Shoe Size Converter",
+            color = colors.textPrimary,
+            fontSize = 18.sp,
+            fontWeight = FontWeight.SemiBold,
+            modifier = Modifier.padding(bottom = 12.dp)
+        )
+
+        // Category chips
+        Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+            SizeCategory.entries.forEach { cat ->
+                FilterChip(
+                    selected = state.sizeCategory == cat,
+                    onClick = { vm.onAction(CalculatorAction.SetSizeCategory(cat)) },
+                    label = { Text(cat.label, fontSize = 13.sp) },
+                    modifier = Modifier.weight(1f),
+                    colors = FilterChipDefaults.filterChipColors(
+                        selectedContainerColor = colors.operator,
+                        selectedLabelColor = colors.operatorContent,
+                        containerColor = colors.surface,
+                        labelColor = colors.textPrimary
+                    )
+                )
+            }
+        }
+
+        // Men's / Women's toggle (shoes only)
+        if (state.sizeCategory == SizeCategory.SHOE) {
+            Row(
+                modifier = Modifier.fillMaxWidth().padding(top = 6.dp),
+                horizontalArrangement = Arrangement.spacedBy(8.dp)
+            ) {
+                listOf(true to "Men's", false to "Women's").forEach { (isMens, label) ->
+                    FilterChip(
+                        selected = state.shoeIsMens == isMens,
+                        onClick = { vm.onAction(CalculatorAction.SetShoeIsMens(isMens)) },
+                        label = { Text(label, fontSize = 13.sp) },
+                        modifier = Modifier.weight(1f),
+                        colors = FilterChipDefaults.filterChipColors(
+                            selectedContainerColor = colors.buttonFunction,
+                            selectedLabelColor = colors.buttonFunctionContent,
+                            containerColor = colors.surface,
+                            labelColor = colors.textPrimary
+                        )
+                    )
+                }
+            }
+        }
+
+        Spacer(Modifier.height(8.dp))
+
+        // Country selectors
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.spacedBy(8.dp),
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            SizeCountrySelector(
+                label = "From",
+                selected = fromCountry,
+                countries = countries,
+                modifier = Modifier.weight(1f),
+                onSelected = { setCountries(it, toCountry) }
+            )
+            IconButton(onClick = { setCountries(toCountry, fromCountry) }) {
+                Icon(Icons.Default.SwapHoriz, contentDescription = "Swap", tint = colors.textSecondary)
+            }
+            SizeCountrySelector(
+                label = "To",
+                selected = toCountry,
+                countries = countries,
+                modifier = Modifier.weight(1f),
+                onSelected = { setCountries(fromCountry, it) }
+            )
+        }
+
+        HorizontalDivider(color = colors.divider, modifier = Modifier.padding(vertical = 12.dp))
+
+        Text(
+            "Select your ${fromDef?.displayName ?: fromCountry} size:",
+            color = colors.textSecondary,
+            fontSize = 13.sp,
+            modifier = Modifier.padding(bottom = 8.dp)
+        )
+
+        // Horizontal scrollable size chips
+        LazyRow(
+            modifier = Modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.spacedBy(8.dp)
+        ) {
+            items(availableSizes) { size ->
+                FilterChip(
+                    selected = selectedSize == size,
+                    onClick = { selectedSize = if (selectedSize == size) "" else size },
+                    label = {
+                        Text(
+                            size,
+                            fontSize = 15.sp,
+                            fontWeight = if (selectedSize == size) FontWeight.Bold else FontWeight.Normal
+                        )
+                    },
+                    colors = FilterChipDefaults.filterChipColors(
+                        selectedContainerColor = colors.equals,
+                        selectedLabelColor = colors.equalsContent,
+                        containerColor = colors.surface,
+                        labelColor = colors.textPrimary
+                    )
+                )
+            }
+        }
+
+        // Result card
+        if (selectedSize.isNotEmpty()) {
+            Spacer(Modifier.height(20.dp))
+            Card(
+                modifier = Modifier.fillMaxWidth(),
+                colors = CardDefaults.cardColors(containerColor = colors.surface)
+            ) {
+                if (result != null) {
+                    Row(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(horizontal = 24.dp, vertical = 20.dp),
+                        horizontalArrangement = Arrangement.spacedBy(12.dp),
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Column(modifier = Modifier.weight(1f), horizontalAlignment = Alignment.CenterHorizontally) {
+                            Text("FROM", color = colors.textMuted, fontSize = 10.sp, fontWeight = FontWeight.Medium)
+                            Text(selectedSize, color = colors.textPrimary, fontSize = 48.sp, fontWeight = FontWeight.Light)
+                            Text(fromDef?.displayName ?: fromCountry, color = colors.textSecondary, fontSize = 13.sp)
+                            if (fromDef?.unit?.isNotEmpty() == true)
+                                Text(fromDef.unit, color = colors.textMuted, fontSize = 11.sp)
+                        }
+                        Text("→", color = colors.textMuted, fontSize = 28.sp)
+                        Column(modifier = Modifier.weight(1f), horizontalAlignment = Alignment.CenterHorizontally) {
+                            Text("TO", color = colors.textMuted, fontSize = 10.sp, fontWeight = FontWeight.Medium)
+                            Text(result, color = colors.toAmountColor, fontSize = 48.sp, fontWeight = FontWeight.Bold)
+                            Text(toDef?.displayName ?: toCountry, color = colors.textSecondary, fontSize = 13.sp)
+                            if (toDef?.unit?.isNotEmpty() == true)
+                                Text(toDef.unit, color = colors.textMuted, fontSize = 11.sp)
+                        }
+                    }
+                } else {
+                    Box(modifier = Modifier.fillMaxWidth().padding(24.dp), contentAlignment = Alignment.Center) {
+                        Text(
+                            "Size not available for this region",
+                            color = colors.textMuted,
+                            fontSize = 14.sp,
+                            textAlign = TextAlign.Center
+                        )
+                    }
+                }
+            }
+        }
+
+        Spacer(Modifier.height(16.dp))
+        Text(
+            "Sizes are approximate and may vary between brands",
+            color = colors.textMuted,
+            fontSize = 11.sp,
+            textAlign = TextAlign.Center,
+            modifier = Modifier.fillMaxWidth()
+        )
+        Spacer(Modifier.height(16.dp))
+    }
+}
+
+@Composable
+private fun SizeCountrySelector(
+    label: String,
+    selected: String,
+    countries: List<SizeCountry>,
+    onSelected: (String) -> Unit,
+    modifier: Modifier = Modifier
+) {
+    val colors = LocalAppColors.current
+    var expanded by remember { mutableStateOf(false) }
+    val selectedCountry = countries.find { it.key == selected }
+
+    Box(modifier = modifier) {
+        OutlinedButton(
+            onClick = { expanded = true },
+            modifier = Modifier.fillMaxWidth(),
+            shape = RoundedCornerShape(8.dp),
+            colors = ButtonDefaults.outlinedButtonColors(contentColor = colors.textPrimary),
+            border = androidx.compose.foundation.BorderStroke(1.dp, colors.inputBorder),
+            contentPadding = PaddingValues(horizontal = 8.dp, vertical = 4.dp)
+        ) {
+            Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                Text(label, fontSize = 10.sp, color = colors.textMuted)
+                Text(
+                    selectedCountry?.displayName ?: selected,
+                    fontSize = 13.sp,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis
+                )
+            }
+        }
+        DropdownMenu(expanded = expanded, onDismissRequest = { expanded = false }) {
+            countries.forEach { country ->
+                DropdownMenuItem(
+                    text = {
+                        Row(verticalAlignment = Alignment.CenterVertically) {
+                            Text(country.displayName, color = colors.textPrimary)
+                            if (country.unit.isNotEmpty()) {
+                                Spacer(Modifier.width(4.dp))
+                                Text("(${country.unit})", fontSize = 11.sp, color = colors.textMuted)
+                            }
+                        }
+                    },
+                    onClick = { onSelected(country.key); expanded = false }
+                )
+            }
         }
     }
 }
