@@ -10,6 +10,7 @@ import androidx.datastore.preferences.core.stringPreferencesKey
 import androidx.datastore.preferences.core.stringSetPreferencesKey
 import androidx.datastore.preferences.preferencesDataStore
 import com.tripcalc.app.ui.AccentScheme
+import com.tripcalc.app.ui.CardProfile
 import com.tripcalc.app.ui.ConversionMode
 import com.tripcalc.app.ui.SizeCategory
 import com.tripcalc.app.ui.DistancePair
@@ -210,14 +211,37 @@ class ExchangeRateRepository(private val context: Context) {
             .ifEmpty { setOf(DistancePair.MILES_KM) }
     }
 
-    private val cardMarkupPercentKey = stringPreferencesKey("card_markup_percent")
+    private val cardProfilesKey = stringPreferencesKey("card_profiles_v2")
+    private val activeCardIdKey = stringPreferencesKey("active_card_id")
+    private val cardProfileListType = object : TypeToken<List<CardProfile>>() {}.type
 
-    suspend fun saveCardMarkupPercent(percent: Double) {
-        context.dataStore.edit { it[cardMarkupPercentKey] = percent.toString() }
+    suspend fun saveCardProfiles(profiles: List<CardProfile>) {
+        context.dataStore.edit { it[cardProfilesKey] = gson.toJson(profiles) }
     }
 
-    suspend fun loadCardMarkupPercent(): Double =
-        context.dataStore.data.first()[cardMarkupPercentKey]?.toDoubleOrNull() ?: 0.0
+    suspend fun loadCardProfiles(): List<CardProfile> {
+        val json = context.dataStore.data.first()[cardProfilesKey] ?: return emptyList()
+        return try {
+            val loaded = gson.fromJson<List<CardProfile>>(json, cardProfileListType)
+            // Gson sets missing fields to null even for non-nullable Kotlin types; sanitize here
+            @Suppress("SENSELESS_COMPARISON")
+            loaded.map { card ->
+                card.copy(
+                    minFeeCurrency = card.minFeeCurrency ?: "",
+                    customRates = card.customRates ?: emptyMap()
+                )
+            }
+        } catch (e: Exception) { emptyList() }
+    }
+
+    suspend fun saveActiveCardId(id: String?) {
+        context.dataStore.edit {
+            if (id != null) it[activeCardIdKey] = id else it.remove(activeCardIdKey)
+        }
+    }
+
+    suspend fun loadActiveCardId(): String? =
+        context.dataStore.data.first()[activeCardIdKey]
 
     private val sizeCategoryKey = stringPreferencesKey("size_category")
     private val shoeIsMensKey = booleanPreferencesKey("shoe_is_mens")

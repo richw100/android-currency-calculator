@@ -10,6 +10,7 @@ import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
 import java.util.Currency as JavaCurrency
+import java.util.UUID
 import kotlin.math.abs
 import kotlin.math.floor
 
@@ -112,6 +113,15 @@ fun lookupSize(table: List<Map<String, String>>, fromKey: String, toKey: String,
     table.find { it[fromKey] == fromValue }?.get(toKey)
 
 
+data class CardProfile(
+    val id: String,
+    val name: String,
+    val markupPercent: Double,
+    val minFeeAmount: Double = 0.0,
+    val minFeeCurrency: String = "",
+    val customRates: Map<String, CustomRateEntry> = emptyMap()
+)
+
 data class CustomRateEntry(val base: String, val rate: Double)
 
 data class HistoryEntry(
@@ -160,7 +170,8 @@ data class CalculatorUiState(
     val fuelUseUkGallons: Boolean = true,
     val swapZeroDot: Boolean = true,
     val enabledModes: Set<ConversionMode> = ConversionMode.entries.toSet(),
-    val cardMarkupPercent: Double = 0.0,
+    val cardProfiles: List<CardProfile> = emptyList(),
+    val activeCardId: String? = null,
     val sizeCategory: SizeCategory = SizeCategory.SHOE,
     val shoeIsMens: Boolean = true,
     val shoeFromCountry: String = "EU",
@@ -209,7 +220,12 @@ sealed class CalculatorAction {
     data class SetSwapZeroDot(val enabled: Boolean) : CalculatorAction()
     data class SetEnabledModes(val modes: Set<ConversionMode>) : CalculatorAction()
     data class SetDefaultTipPercent(val percent: Double) : CalculatorAction()
-    data class SetCardMarkupPercent(val percent: Double) : CalculatorAction()
+    data class AddCardProfile(val name: String, val markupPercent: Double, val minFeeAmount: Double, val minFeeCurrency: String) : CalculatorAction()
+    data class UpdateCardProfile(val id: String, val name: String, val markupPercent: Double, val minFeeAmount: Double, val minFeeCurrency: String) : CalculatorAction()
+    data class DeleteCardProfile(val id: String) : CalculatorAction()
+    data class SetActiveCard(val id: String?) : CalculatorAction()
+    data class SetCardCustomRate(val cardId: String, val target: String, val base: String, val rate: Double) : CalculatorAction()
+    data class DeleteCardCustomRate(val cardId: String, val target: String) : CalculatorAction()
     object SendTipShareToFX : CalculatorAction()
     data class SetSizeCategory(val category: SizeCategory) : CalculatorAction()
     data class SetShoeIsMens(val isMens: Boolean) : CalculatorAction()
@@ -256,13 +272,14 @@ class CalculatorViewModel(application: Application) : AndroidViewModel(applicati
             val swapZeroDot = repository.loadSwapZeroDot()
             val enabledModes = repository.loadEnabledModes()
             val enabledDistancePairs = repository.loadEnabledDistancePairs()
-            val cardMarkupPercent = repository.loadCardMarkupPercent()
+            val cardProfiles = repository.loadCardProfiles()
+            val activeCardId = repository.loadActiveCardId()
             val sizeCategory = repository.loadSizeCategory()
             val shoeIsMens = repository.loadShoeIsMens()
             val (shoeFrom, shoeTo) = repository.loadShoeCountries()
             val (womensFrom, womensTo) = repository.loadWomensCountries()
             val (mensFrom, mensTo) = repository.loadMensCountries()
-            _uiState.update { it.copy(toCurrency = to, fromCurrency = from, recentCurrencies = recents, customRates = customRates, hapticEnabled = hapticEnabled, history = history, darkModePref = darkModePref, accentScheme = accentScheme, defaultTipPercent = defaultTipPercent, tipPercent = defaultTipPercent, customTipPercent = customTipPercent, fuelUseUkGallons = fuelUseUkGallons, swapZeroDot = swapZeroDot, enabledModes = enabledModes, enabledDistancePairs = enabledDistancePairs, cardMarkupPercent = cardMarkupPercent, sizeCategory = sizeCategory, shoeIsMens = shoeIsMens, shoeFromCountry = shoeFrom, shoeToCountry = shoeTo, womensFromCountry = womensFrom, womensToCountry = womensTo, mensFromCountry = mensFrom, mensToCountry = mensTo) }
+            _uiState.update { it.copy(toCurrency = to, fromCurrency = from, recentCurrencies = recents, customRates = customRates, hapticEnabled = hapticEnabled, history = history, darkModePref = darkModePref, accentScheme = accentScheme, defaultTipPercent = defaultTipPercent, tipPercent = defaultTipPercent, customTipPercent = customTipPercent, fuelUseUkGallons = fuelUseUkGallons, swapZeroDot = swapZeroDot, enabledModes = enabledModes, enabledDistancePairs = enabledDistancePairs, cardProfiles = cardProfiles, activeCardId = activeCardId, sizeCategory = sizeCategory, shoeIsMens = shoeIsMens, shoeFromCountry = shoeFrom, shoeToCountry = shoeTo, womensFromCountry = womensFrom, womensToCountry = womensTo, mensFromCountry = mensFrom, mensToCountry = mensTo) }
             fetchRates(forceRefresh = false)
         }
     }
@@ -463,9 +480,48 @@ class CalculatorViewModel(application: Application) : AndroidViewModel(applicati
                 viewModelScope.launch { repository.saveDefaultTipPercent(action.percent) }
                 updateDisplay(); return
             }
-            is CalculatorAction.SetCardMarkupPercent -> {
-                _uiState.update { it.copy(cardMarkupPercent = action.percent) }
-                viewModelScope.launch { repository.saveCardMarkupPercent(action.percent) }
+            is CalculatorAction.AddCardProfile -> {
+                val profile = CardProfile(UUID.randomUUID().toString(), action.name, action.markupPercent, action.minFeeAmount, action.minFeeCurrency)
+                val updated = _uiState.value.cardProfiles + profile
+                _uiState.update { it.copy(cardProfiles = updated) }
+                viewModelScope.launch { repository.saveCardProfiles(updated) }
+                return
+            }
+            is CalculatorAction.UpdateCardProfile -> {
+                val updated = _uiState.value.cardProfiles.map {
+                    if (it.id == action.id) it.copy(name = action.name, markupPercent = action.markupPercent, minFeeAmount = action.minFeeAmount, minFeeCurrency = action.minFeeCurrency) else it
+                }
+                _uiState.update { it.copy(cardProfiles = updated) }
+                viewModelScope.launch { repository.saveCardProfiles(updated) }
+                updateCurrencyDisplay(); return
+            }
+            is CalculatorAction.DeleteCardProfile -> {
+                val updated = _uiState.value.cardProfiles.filter { it.id != action.id }
+                val newActiveId = if (_uiState.value.activeCardId == action.id) null else _uiState.value.activeCardId
+                _uiState.update { it.copy(cardProfiles = updated, activeCardId = newActiveId) }
+                viewModelScope.launch { repository.saveCardProfiles(updated); repository.saveActiveCardId(newActiveId) }
+                updateCurrencyDisplay(); return
+            }
+            is CalculatorAction.SetActiveCard -> {
+                _uiState.update { it.copy(activeCardId = action.id) }
+                viewModelScope.launch { repository.saveActiveCardId(action.id) }
+                updateCurrencyDisplay(); return
+            }
+            is CalculatorAction.SetCardCustomRate -> {
+                val updated = _uiState.value.cardProfiles.map { card ->
+                    if (card.id == action.cardId) card.copy(customRates = card.customRates + (action.target to CustomRateEntry(action.base, action.rate)))
+                    else card
+                }
+                _uiState.update { it.copy(cardProfiles = updated) }
+                viewModelScope.launch { repository.saveCardProfiles(updated) }
+                updateCurrencyDisplay(); return
+            }
+            is CalculatorAction.DeleteCardCustomRate -> {
+                val updated = _uiState.value.cardProfiles.map { card ->
+                    if (card.id == action.cardId) card.copy(customRates = card.customRates - action.target) else card
+                }
+                _uiState.update { it.copy(cardProfiles = updated) }
+                viewModelScope.launch { repository.saveCardProfiles(updated) }
                 updateCurrencyDisplay(); return
             }
             is CalculatorAction.SetSizeCategory -> {
@@ -765,7 +821,12 @@ class CalculatorViewModel(application: Application) : AndroidViewModel(applicati
 
     // Returns the effective "1 USD = X [code]" rate, preferring custom pair entries over live rates.
     // Custom entry "1 base = rate target" → effectiveUsdRate(target) = liveUsdRate(base) * rate
-    private fun effectiveUsdRate(code: String, state: CalculatorUiState): Double? {
+    // Card rates take priority over global custom rates, which take priority over live rates
+    private fun effectiveUsdRate(code: String, state: CalculatorUiState, cardRates: Map<String, CustomRateEntry>? = null): Double? {
+        cardRates?.get(code)?.let { entry ->
+            val baseRate = rates[entry.base] ?: return null
+            return baseRate * entry.rate
+        }
         val entry = state.customRates[code]
         return if (entry != null) {
             val baseRate = rates[entry.base] ?: return null
@@ -778,19 +839,42 @@ class CalculatorViewModel(application: Application) : AndroidViewModel(applicati
     private fun updateCurrencyDisplay() {
         val value = currentInput.toDoubleOrNull() ?: 0.0
         val state = _uiState.value
-        val fromRate = effectiveUsdRate(state.fromCurrency, state)
-        val toRate = effectiveUsdRate(state.toCurrency, state)
+        val activeCard = state.cardProfiles.find { it.id == state.activeCardId }
+        val cardRates = activeCard?.customRates?.takeIf { it.isNotEmpty() }
+        val fromRate = effectiveUsdRate(state.fromCurrency, state, cardRates)
+        val toRate = effectiveUsdRate(state.toCurrency, state, cardRates)
 
         if (fromRate != null && toRate != null && fromRate != 0.0) {
-            val markupFactor = 1.0 + state.cardMarkupPercent / 100.0
-            val toValue = value * toRate / fromRate * markupFactor
+            val baseToValue = value * toRate / fromRate
             val fromName = try { JavaCurrency.getInstance(state.fromCurrency).displayName } catch (e: Exception) { state.fromCurrency }
             val toName = try { JavaCurrency.getInstance(state.toCurrency).displayName } catch (e: Exception) { state.toCurrency }
-            val usingCustom = state.customRates.containsKey(state.fromCurrency) || state.customRates.containsKey(state.toCurrency)
-            val markupLabel = if (state.cardMarkupPercent > 0)
-                "  •  +${"%.2f".format(state.cardMarkupPercent).trimEnd('0').trimEnd('.')}% card fee" else ""
+            val usingCustom = state.customRates.containsKey(state.fromCurrency) || state.customRates.containsKey(state.toCurrency) ||
+                (cardRates != null && (cardRates.containsKey(state.fromCurrency) || cardRates.containsKey(state.toCurrency)))
+
+            val (toValue, cardLabel) = if (activeCard != null) {
+                val percentFee = baseToValue * activeCard.markupPercent / 100.0
+                val pctStr = if (activeCard.markupPercent == 0.0) "0%"
+                    else "+${"%.2f".format(activeCard.markupPercent).trimEnd('0').trimEnd('.')}%"
+                if (value > 0 && activeCard.minFeeAmount > 0 && activeCard.minFeeCurrency.isNotEmpty()) {
+                    val minFeeRate = rates[activeCard.minFeeCurrency]
+                    val minFeeInTo = if (minFeeRate != null && minFeeRate > 0)
+                        activeCard.minFeeAmount * toRate / minFeeRate
+                    else activeCard.minFeeAmount
+                    if (minFeeInTo > percentFee) {
+                        val minStr = "${"%.2f".format(activeCard.minFeeAmount)} ${activeCard.minFeeCurrency}"
+                        Pair(baseToValue + minFeeInTo, "  •  💳 ${activeCard.name} min. $minStr")
+                    } else {
+                        Pair(baseToValue + percentFee, "  •  💳 ${activeCard.name} $pctStr")
+                    }
+                } else {
+                    Pair(baseToValue + percentFee, "  •  💳 ${activeCard.name} $pctStr")
+                }
+            } else {
+                Pair(baseToValue, "")
+            }
+
             val rateLabel = "1 ${state.fromCurrency} ($fromName) = ${"%.4f".format(toRate / fromRate)} ${state.toCurrency} ($toName)" +
-                (if (usingCustom) " ★" else "") + markupLabel
+                (if (usingCustom) " ★" else "") + cardLabel
             val pctDiff = if (usingCustom) {
                 val liveFrom = rates[state.fromCurrency]
                 val liveTo = rates[state.toCurrency]

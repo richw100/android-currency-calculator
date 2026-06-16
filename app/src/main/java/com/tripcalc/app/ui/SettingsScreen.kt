@@ -19,7 +19,9 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.Check
 import androidx.compose.material.icons.filled.Close
+import androidx.compose.material.icons.filled.CreditCard
 import androidx.compose.material.icons.filled.Edit
+import androidx.compose.material.icons.filled.SwapHoriz
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
@@ -39,6 +41,9 @@ fun SettingsScreen(vm: CalculatorViewModel, modifier: Modifier = Modifier) {
     val colors = LocalAppColors.current
     var showDialog by remember { mutableStateOf(false) }
     var editingTarget by remember { mutableStateOf("") }
+    var showCardDialog by remember { mutableStateOf(false) }
+    var editingCard by remember { mutableStateOf<CardProfile?>(null) }
+    var cardForRates by remember { mutableStateOf<CardProfile?>(null) }
     var customTipInput by remember(state.customTipPercent) {
         mutableStateOf(
             if (state.customTipPercent == state.customTipPercent.toLong().toDouble())
@@ -48,6 +53,35 @@ fun SettingsScreen(vm: CalculatorViewModel, modifier: Modifier = Modifier) {
     }
     val customTipValue = customTipInput.toDoubleOrNull()
     val customTipValid = customTipValue != null && customTipValue > 0 && customTipValue <= 100
+
+    if (showCardDialog) {
+        CardProfileDialog(
+            existing = editingCard,
+            availableCurrencies = state.availableCurrencies,
+            defaultCurrency = state.toCurrency,
+            onSave = { name, pct, minFee, minCur ->
+                if (editingCard == null) vm.onAction(CalculatorAction.AddCardProfile(name, pct, minFee, minCur))
+                else vm.onAction(CalculatorAction.UpdateCardProfile(editingCard!!.id, name, pct, minFee, minCur))
+                showCardDialog = false; editingCard = null
+            },
+            onDismiss = { showCardDialog = false; editingCard = null }
+        )
+    }
+
+    cardForRates?.let { card ->
+        // Re-read live card from state so counts stay current while dialog is open
+        val liveCard = state.cardProfiles.find { it.id == card.id } ?: card
+        CardRatesDialog(
+            card = liveCard,
+            availableCurrencies = state.availableCurrencies,
+            liveRates = state.liveRates,
+            defaultTarget = state.fromCurrency,
+            defaultBase = state.toCurrency,
+            onRateSet = { target, base, rate -> vm.onAction(CalculatorAction.SetCardCustomRate(liveCard.id, target, base, rate)) },
+            onRateDelete = { target -> vm.onAction(CalculatorAction.DeleteCardCustomRate(liveCard.id, target)) },
+            onDismiss = { cardForRates = null }
+        )
+    }
 
     if (showDialog) {
         val existing = state.customRates[editingTarget]
@@ -139,46 +173,63 @@ fun SettingsScreen(vm: CalculatorViewModel, modifier: Modifier = Modifier) {
 
         Spacer(Modifier.height(16.dp))
 
-        Card(modifier = Modifier.fillMaxWidth(), colors = CardDefaults.cardColors(containerColor = colors.surface)) {
-            Column(modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 12.dp)) {
-                Row(verticalAlignment = Alignment.CenterVertically) {
-                    Column(modifier = Modifier.weight(1f)) {
-                        Text("Card fee markup", color = colors.textPrimary, fontSize = 15.sp)
-                        Text("Add your card's foreign transaction fee to conversions", color = colors.textSecondary, fontSize = 12.sp)
-                    }
-                    Text(
-                        text = if (state.cardMarkupPercent == 0.0) "Off"
-                               else "${"%.2f".format(state.cardMarkupPercent).trimEnd('0').trimEnd('.')}%",
-                        color = if (state.cardMarkupPercent > 0) colors.warningColor else colors.textMuted,
-                        fontSize = 14.sp,
-                        fontWeight = androidx.compose.ui.text.font.FontWeight.Medium
-                    )
-                }
-                Slider(
-                    value = state.cardMarkupPercent.toFloat(),
-                    onValueChange = {
-                        val snapped = ((it / 0.25f).roundToInt() * 0.25).coerceIn(0.0, 5.0)
-                        vm.onAction(CalculatorAction.SetCardMarkupPercent(snapped))
-                    },
-                    valueRange = 0f..5f,
-                    steps = 19,
-                    colors = SliderDefaults.colors(
-                        thumbColor = colors.operator,
-                        activeTrackColor = colors.operator,
-                        inactiveTrackColor = colors.divider
-                    )
-                )
+        // ── Card profiles ─────────────────────────────────────────────────────
+        Text("CARD PROFILES", fontSize = 12.sp, color = colors.textSecondary, fontWeight = FontWeight.Medium, modifier = Modifier.padding(bottom = 8.dp))
+        Text(
+            "Save each card's foreign transaction fee. Select a card on the calculator to include its fee in conversions.",
+            fontSize = 13.sp, color = colors.textMuted, lineHeight = 19.sp, modifier = Modifier.padding(bottom = 12.dp)
+        )
+
+        state.cardProfiles.forEach { card ->
+            val pctPart = if (card.markupPercent == 0.0) "0%" else "${"%.2f".format(card.markupPercent).trimEnd('0').trimEnd('.')}%"
+            val minPart = if (card.minFeeAmount > 0 && card.minFeeCurrency.isNotEmpty())
+                " · min. ${"%.2f".format(card.minFeeAmount).trimEnd('0').trimEnd('.')} ${card.minFeeCurrency}" else ""
+            val ratesPart = if (card.customRates.isNotEmpty()) " · ${card.customRates.size} custom rate${if (card.customRates.size == 1) "" else "s"}" else ""
+            val feeText = "$pctPart fee$minPart$ratesPart"
+            Card(
+                modifier = Modifier.fillMaxWidth().padding(vertical = 4.dp),
+                colors = CardDefaults.cardColors(containerColor = colors.surface)
+            ) {
                 Row(
-                    modifier = Modifier.fillMaxWidth(),
-                    horizontalArrangement = Arrangement.SpaceBetween
+                    modifier = Modifier.fillMaxWidth().padding(horizontal = 12.dp, vertical = 10.dp),
+                    verticalAlignment = Alignment.CenterVertically
                 ) {
-                    Text("0% (off)", fontSize = 11.sp, color = colors.textMuted)
-                    Text("5%", fontSize = 11.sp, color = colors.textMuted)
+                    Icon(Icons.Default.CreditCard, null, tint = colors.operator, modifier = Modifier.size(20.dp).padding(end = 0.dp))
+                    Spacer(Modifier.width(10.dp))
+                    Column(modifier = Modifier.weight(1f)) {
+                        Text(card.name, color = colors.textPrimary, fontSize = 15.sp, fontWeight = FontWeight.Medium)
+                        Text(feeText, color = if (card.markupPercent > 0 || card.minFeeAmount > 0) colors.warningColor else colors.positiveColor, fontSize = 12.sp)
+                    }
+                    IconButton(onClick = { cardForRates = card }) {
+                        Icon(Icons.Default.SwapHoriz, "Rates", tint = if (card.customRates.isNotEmpty()) colors.operator else colors.textSecondary, modifier = Modifier.size(18.dp))
+                    }
+                    IconButton(onClick = { editingCard = card; showCardDialog = true }) {
+                        Icon(Icons.Default.Edit, "Edit", tint = colors.textSecondary, modifier = Modifier.size(18.dp))
+                    }
+                    IconButton(onClick = { vm.onAction(CalculatorAction.DeleteCardProfile(card.id)) }) {
+                        Icon(Icons.Default.Close, "Delete", tint = colors.textSecondary, modifier = Modifier.size(18.dp))
+                    }
                 }
             }
+        }
 
-            HorizontalDivider(modifier = Modifier.padding(horizontal = 16.dp), color = colors.divider)
+        Spacer(Modifier.height(8.dp))
 
+        OutlinedButton(
+            onClick = { editingCard = null; showCardDialog = true },
+            modifier = Modifier.fillMaxWidth(),
+            shape = RoundedCornerShape(10.dp),
+            colors = ButtonDefaults.outlinedButtonColors(contentColor = colors.operator),
+            border = BorderStroke(1.dp, colors.operator)
+        ) {
+            Icon(Icons.Default.Add, null, modifier = Modifier.size(18.dp))
+            Spacer(Modifier.width(8.dp))
+            Text("Add card", fontSize = 15.sp, modifier = Modifier.padding(vertical = 4.dp))
+        }
+
+        Spacer(Modifier.height(16.dp))
+
+        Card(modifier = Modifier.fillMaxWidth(), colors = CardDefaults.cardColors(containerColor = colors.surface)) {
             Row(
                 modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 12.dp),
                 verticalAlignment = Alignment.CenterVertically
@@ -450,6 +501,177 @@ fun SettingsScreen(vm: CalculatorViewModel, modifier: Modifier = Modifier) {
         }
 
     }
+}
+
+@Composable
+private fun CardRatesDialog(
+    card: CardProfile,
+    availableCurrencies: List<String>,
+    liveRates: Map<String, Double>,
+    defaultTarget: String,
+    defaultBase: String,
+    onRateSet: (target: String, base: String, rate: Double) -> Unit,
+    onRateDelete: (target: String) -> Unit,
+    onDismiss: () -> Unit
+) {
+    val colors = LocalAppColors.current
+    var showAddRate by remember { mutableStateOf(false) }
+    var editingTarget by remember { mutableStateOf("") }
+
+    if (showAddRate) {
+        val existing = card.customRates[editingTarget]
+        CustomRateDialog(
+            initialTarget = editingTarget,
+            initialBase = existing?.base ?: defaultBase,
+            initialRate = if (existing != null) "%.4f".format(existing.rate).trimEnd('0').trimEnd('.') else "",
+            defaultTarget = defaultTarget,
+            availableCurrencies = availableCurrencies,
+            liveRates = liveRates,
+            onSave = { base, target, rate -> onRateSet(target, base, rate); showAddRate = false; editingTarget = "" },
+            onDismiss = { showAddRate = false; editingTarget = "" }
+        )
+    }
+
+    Dialog(onDismissRequest = onDismiss) {
+        Surface(shape = RoundedCornerShape(16.dp), color = colors.surface) {
+            Column(modifier = Modifier.padding(20.dp)) {
+                Text("${card.name} — rates", color = colors.textPrimary, fontSize = 17.sp, fontWeight = FontWeight.SemiBold)
+                Spacer(Modifier.height(4.dp))
+                Text("Override the live rate for this card. Falls back to the live rate for currencies without a custom entry.", color = colors.textMuted, fontSize = 12.sp, lineHeight = 16.sp)
+                Spacer(Modifier.height(12.dp))
+
+                if (card.customRates.isEmpty()) {
+                    Text("No custom rates yet.", color = colors.textMuted, fontSize = 13.sp, modifier = Modifier.padding(vertical = 8.dp))
+                } else {
+                    card.customRates.forEach { (target, entry) ->
+                        Row(
+                            modifier = Modifier.fillMaxWidth().padding(vertical = 4.dp),
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            Column(modifier = Modifier.weight(1f)) {
+                                Text("1 ${entry.base} = ${"%.4f".format(entry.rate).trimEnd('0').trimEnd('.')} $target", color = colors.textPrimary, fontSize = 14.sp)
+                            }
+                            IconButton(onClick = { editingTarget = target; showAddRate = true }, modifier = Modifier.size(36.dp)) {
+                                Icon(Icons.Default.Edit, "Edit", tint = colors.textSecondary, modifier = Modifier.size(16.dp))
+                            }
+                            IconButton(onClick = { onRateDelete(target) }, modifier = Modifier.size(36.dp)) {
+                                Icon(Icons.Default.Close, "Delete", tint = colors.textSecondary, modifier = Modifier.size(16.dp))
+                            }
+                        }
+                    }
+                }
+
+                Spacer(Modifier.height(8.dp))
+                OutlinedButton(
+                    onClick = { editingTarget = ""; showAddRate = true },
+                    modifier = Modifier.fillMaxWidth(),
+                    shape = RoundedCornerShape(10.dp),
+                    colors = ButtonDefaults.outlinedButtonColors(contentColor = colors.operator),
+                    border = BorderStroke(1.dp, colors.operator)
+                ) {
+                    Icon(Icons.Default.Add, null, modifier = Modifier.size(16.dp))
+                    Spacer(Modifier.width(6.dp))
+                    Text("Add rate", fontSize = 14.sp)
+                }
+                Spacer(Modifier.height(4.dp))
+                TextButton(onClick = onDismiss, modifier = Modifier.align(Alignment.End)) {
+                    Text("Done", color = colors.fromAmountColor)
+                }
+            }
+        }
+    }
+}
+
+@Composable
+private fun CardProfileDialog(
+    existing: CardProfile?,
+    availableCurrencies: List<String>,
+    defaultCurrency: String,
+    onSave: (name: String, markupPercent: Double, minFeeAmount: Double, minFeeCurrency: String) -> Unit,
+    onDismiss: () -> Unit
+) {
+    val colors = LocalAppColors.current
+    var name by remember { mutableStateOf(existing?.name ?: "") }
+    var markup by remember { mutableStateOf(existing?.markupPercent?.toFloat() ?: 0f) }
+    var minFeeInput by remember { mutableStateOf(
+        if ((existing?.minFeeAmount ?: 0.0) > 0) "%.2f".format(existing!!.minFeeAmount).trimEnd('0').trimEnd('.') else ""
+    ) }
+    var minFeeCurrency by remember { mutableStateOf(
+        existing?.minFeeCurrency?.takeIf { it.isNotEmpty() } ?: defaultCurrency
+    ) }
+
+    val snappedMarkup = ((markup / 0.25f).roundToInt() * 0.25).coerceIn(0.0, 5.0)
+    val markupLabel = if (snappedMarkup == 0.0) "Off (0%)" else "${"%.2f".format(snappedMarkup).trimEnd('0').trimEnd('.')}%"
+    val minFeeAmount = minFeeInput.toDoubleOrNull() ?: 0.0
+
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        containerColor = colors.surface,
+        title = { Text(if (existing == null) "Add card" else "Edit card", color = colors.textPrimary) },
+        text = {
+            Column {
+                OutlinedTextField(
+                    value = name,
+                    onValueChange = { name = it },
+                    label = { Text("Card name", fontSize = 13.sp) },
+                    placeholder = { Text("e.g. Starling, Wise, Chase", fontSize = 13.sp) },
+                    singleLine = true,
+                    modifier = Modifier.fillMaxWidth(),
+                    colors = OutlinedTextFieldDefaults.colors(
+                        focusedTextColor = colors.textPrimary,
+                        unfocusedTextColor = colors.textPrimary
+                    )
+                )
+                Spacer(Modifier.height(16.dp))
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Text("Foreign transaction fee", color = colors.textPrimary, fontSize = 14.sp, modifier = Modifier.weight(1f))
+                    Text(markupLabel, color = if (snappedMarkup > 0) colors.warningColor else colors.textMuted, fontSize = 14.sp, fontWeight = FontWeight.Medium)
+                }
+                Slider(
+                    value = markup,
+                    onValueChange = { markup = it },
+                    valueRange = 0f..5f,
+                    steps = 19,
+                    colors = SliderDefaults.colors(thumbColor = colors.operator, activeTrackColor = colors.operator, inactiveTrackColor = colors.divider)
+                )
+                Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
+                    Text("0% (off)", fontSize = 11.sp, color = colors.textMuted)
+                    Text("5%", fontSize = 11.sp, color = colors.textMuted)
+                }
+                Spacer(Modifier.height(16.dp))
+                Text("Minimum fee", color = colors.textPrimary, fontSize = 14.sp)
+                Text("Applied when the % fee is lower (e.g. 3% or min. £3)", color = colors.textMuted, fontSize = 12.sp, lineHeight = 16.sp)
+                Spacer(Modifier.height(8.dp))
+                OutlinedTextField(
+                    value = minFeeInput,
+                    onValueChange = { v -> if (v.matches(Regex("""^\d{0,6}(\.\d{0,2})?$"""))) minFeeInput = v },
+                    label = { Text("Amount (0 = off)", fontSize = 12.sp) },
+                    singleLine = true,
+                    keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal),
+                    modifier = Modifier.fillMaxWidth(),
+                    colors = OutlinedTextFieldDefaults.colors(
+                        focusedTextColor = colors.textPrimary,
+                        unfocusedTextColor = colors.textPrimary
+                    )
+                )
+                Spacer(Modifier.height(8.dp))
+                Text("Currency", fontSize = 12.sp, color = colors.textSecondary)
+                Spacer(Modifier.height(4.dp))
+                CurrencyDropdown(
+                    code = minFeeCurrency,
+                    availableCurrencies = availableCurrencies,
+                    onSelected = { minFeeCurrency = it }
+                )
+            }
+        },
+        confirmButton = {
+            TextButton(
+                onClick = { if (name.isNotBlank()) onSave(name.trim(), snappedMarkup, minFeeAmount, if (minFeeAmount > 0) minFeeCurrency else "") },
+                enabled = name.isNotBlank()
+            ) { Text("Save", color = colors.fromAmountColor) }
+        },
+        dismissButton = { TextButton(onClick = onDismiss) { Text("Cancel", color = colors.textSecondary) } }
+    )
 }
 
 @Composable

@@ -406,6 +406,45 @@ fun CalculatorScreen(vm: CalculatorViewModel = viewModel(), modifier: Modifier =
                 }
             }
 
+            // Card selector (shown when any card profiles exist)
+            if (state.cardProfiles.isNotEmpty()) {
+                LazyRow(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(horizontal = 12.dp, vertical = 2.dp),
+                    horizontalArrangement = Arrangement.spacedBy(6.dp)
+                ) {
+                    item {
+                        FilterChip(
+                            selected = state.activeCardId == null,
+                            onClick = { vm.onAction(CalculatorAction.SetActiveCard(null)) },
+                            label = { Text("No card fee", fontSize = 12.sp) },
+                            colors = FilterChipDefaults.filterChipColors(
+                                selectedContainerColor = colors.buttonFunction,
+                                selectedLabelColor = colors.buttonFunctionContent,
+                                containerColor = colors.surface,
+                                labelColor = colors.textPrimary
+                            )
+                        )
+                    }
+                    items(state.cardProfiles) { card ->
+                        val feeLabel = if (card.markupPercent == 0.0) "0%"
+                            else "+${"%.2f".format(card.markupPercent).trimEnd('0').trimEnd('.')}%"
+                        FilterChip(
+                            selected = state.activeCardId == card.id,
+                            onClick = { vm.onAction(CalculatorAction.SetActiveCard(card.id)) },
+                            label = { Text("💳 ${card.name} · $feeLabel", fontSize = 12.sp) },
+                            colors = FilterChipDefaults.filterChipColors(
+                                selectedContainerColor = colors.operator,
+                                selectedLabelColor = colors.operatorContent,
+                                containerColor = colors.surface,
+                                labelColor = colors.textPrimary
+                            )
+                        )
+                    }
+                }
+            }
+
             // Exchange rate info (no last-updated — see Settings)
             Column(
                 modifier = Modifier
