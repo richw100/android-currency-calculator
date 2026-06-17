@@ -19,8 +19,8 @@ android {
         applicationId = "com.tripcalc.app"
         minSdk = 26
         targetSdk = 35
-        versionCode = 8
-        versionName = "1.2.3"
+        versionCode = 9
+        versionName = "1.2.4"
     }
 
     signingConfigs {
