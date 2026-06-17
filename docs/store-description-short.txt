@@ -1,1 +1,1 @@
-Currency, tip, unit & fuel calculator for travellers. No ads.
+Currency converter with card fees, tip, size & unit tools. No ads.

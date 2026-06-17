@@ -1,28 +1,43 @@
 TripCalc — the calculator built for travel.
 
-Everything you need when you're abroad, in one place. Convert currencies as you type, split a restaurant bill, convert miles to kilometres, Fahrenheit to Celsius, and check your fuel economy — all without leaving the app.
+Your travel companion for money and more. Live currency conversion across 161 currencies, card fee profiles so you always know what you'll actually pay, plus a tip calculator, fuel converter, distance and temperature tools, and an international clothing and shoe size guide — everything you need when you're away from home.
+
+No ads. No account. No tracking.
 
 
 CURRENCY CONVERSION
 
-Rates are fetched automatically from open.er-api.com, covering 161 currencies worldwide. Rates refresh every 24 hours and are cached so the app keeps working even when you're offline. Set a custom rate if you've already locked in your exchange rate from a bank or travel money provider — the app shows exactly how it compares to the live rate.
+Rates are fetched automatically from open.er-api.com, covering 161 currencies worldwide. Rates refresh every 24 hours and are cached so the app keeps working offline. Set a custom rate if you've already locked in your exchange rate from a bank or travel money provider.
+
+
+CARD PROFILES
+
+Create named profiles for your payment cards, each with its own foreign transaction fee percentage and optional minimum charge (e.g. 2.75% or minimum £3). The app applies the correct fee automatically and shows the true cost of every transaction. Add per-card exchange rate overrides for currencies where your card offers a fixed or non-live rate.
 
 
 TIP & BILL SPLITTING
 
-Enter the bill, choose your tip percentage (or set a custom one), and split it however many ways you need. One tap sends your share straight to the currency converter — so you always know what you're paying in your home currency.
+Enter the bill, choose your tip percentage (or set a custom one), and split it however many ways you need. One tap sends the total straight to the currency converter — so you always know what you're paying in your home currency.
 
 
 UNIT CONVERSIONS
 
 • Miles ↔ Kilometres
+• Inches ↔ Centimetres
+• Feet ↔ Metres
+• Square feet ↔ Square metres
 • Celsius ↔ Fahrenheit
 • MPG (UK or US) ↔ Litres per 100km
 
 
+CLOTHING & SHOE SIZE CONVERTER
+
+Convert between international sizing standards for men's and women's clothing and shoes — covering UK, EU, US, and more. Tap a size in one system to instantly see the equivalent in another.
+
+
 FULL CALCULATOR
 
-All the standard operations — add, subtract, multiply, divide — plus brackets for complex expressions and a percentage key. A scrollable history of recent calculations lets you tap any result to restore it instantly.
+All the standard operations — add, subtract, multiply, divide — plus brackets for complex expressions and a percentage key. A scrollable history of recent conversions lets you tap any entry to restore it instantly, with optional notes to label what each calculation was for.
 
 
 CUSTOMISABLE APPEARANCE
@@ -30,19 +45,17 @@ CUSTOMISABLE APPEARANCE
 Choose from five accent colour schemes. Switch between dark mode, light mode, or follow your device's system setting.
 
 
-NO ADS, EVER
-
-Clean, distraction-free interface. No banner ads, no pop-ups, no subscriptions. Just a calculator.
-
-
 FEATURES AT A GLANCE
 
 • Live rates for 161 currencies, refreshed every 24 hours
+• Card fee profiles with minimum fee support and per-card rates
 • Tip calculator with bill splitting and FX hand-off
-• Miles ↔ km, °C ↔ °F, MPG ↔ L/100km
+• International clothing and shoe size converter
+• Miles ↔ km, inches ↔ cm, feet ↔ m, sq ft ↔ sq m
+• °C ↔ °F, MPG ↔ L/100km
 • Full calculator with brackets and percentage
-• Calculation history — tap any entry to restore it
-• Custom exchange rates with live rate comparison
+• Calculation history with notes — tap any entry to restore it
+• Custom exchange rates
 • Light and dark mode with system setting support
 • Five accent colour themes
 • Haptic feedback (optional)
