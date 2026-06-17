@@ -83,8 +83,8 @@ class ExchangeRateRepository(private val context: Context) {
     suspend fun loadCurrencyPrefs(): Pair<String, String> {
         val prefs = context.dataStore.data.first()
         return Pair(
-            prefs[HOME_CURRENCY_KEY] ?: "EUR",
-            prefs[LOCAL_CURRENCY_KEY] ?: "GBP"
+            prefs[HOME_CURRENCY_KEY] ?: "GBP",
+            prefs[LOCAL_CURRENCY_KEY] ?: "EUR"
         )
     }
 
