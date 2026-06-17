@@ -21,7 +21,6 @@ import androidx.compose.material.icons.filled.Check
 import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.CreditCard
 import androidx.compose.material.icons.filled.Edit
-import androidx.compose.material.icons.filled.SwapHoriz
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
@@ -43,7 +42,6 @@ fun SettingsScreen(vm: CalculatorViewModel, modifier: Modifier = Modifier) {
     var editingTarget by remember { mutableStateOf("") }
     var showCardDialog by remember { mutableStateOf(false) }
     var editingCard by remember { mutableStateOf<CardProfile?>(null) }
-    var cardForRates by remember { mutableStateOf<CardProfile?>(null) }
     var customTipInput by remember(state.customTipPercent) {
         mutableStateOf(
             if (state.customTipPercent == state.customTipPercent.toLong().toDouble())
@@ -55,31 +53,21 @@ fun SettingsScreen(vm: CalculatorViewModel, modifier: Modifier = Modifier) {
     val customTipValid = customTipValue != null && customTipValue > 0 && customTipValue <= 100
 
     if (showCardDialog) {
+        val liveCard = editingCard?.let { c -> state.cardProfiles.find { it.id == c.id } } ?: editingCard
         CardProfileDialog(
-            existing = editingCard,
+            existing = liveCard,
             availableCurrencies = state.availableCurrencies,
             defaultCurrency = state.toCurrency,
+            liveRates = state.liveRates,
+            defaultRateTarget = state.fromCurrency,
             onSave = { name, pct, minFee, minCur ->
                 if (editingCard == null) vm.onAction(CalculatorAction.AddCardProfile(name, pct, minFee, minCur))
                 else vm.onAction(CalculatorAction.UpdateCardProfile(editingCard!!.id, name, pct, minFee, minCur))
                 showCardDialog = false; editingCard = null
             },
+            onRateSet = { target, base, rate -> editingCard?.let { vm.onAction(CalculatorAction.SetCardCustomRate(it.id, target, base, rate)) } },
+            onRateDelete = { target -> editingCard?.let { vm.onAction(CalculatorAction.DeleteCardCustomRate(it.id, target)) } },
             onDismiss = { showCardDialog = false; editingCard = null }
-        )
-    }
-
-    cardForRates?.let { card ->
-        // Re-read live card from state so counts stay current while dialog is open
-        val liveCard = state.cardProfiles.find { it.id == card.id } ?: card
-        CardRatesDialog(
-            card = liveCard,
-            availableCurrencies = state.availableCurrencies,
-            liveRates = state.liveRates,
-            defaultTarget = state.fromCurrency,
-            defaultBase = state.toCurrency,
-            onRateSet = { target, base, rate -> vm.onAction(CalculatorAction.SetCardCustomRate(liveCard.id, target, base, rate)) },
-            onRateDelete = { target -> vm.onAction(CalculatorAction.DeleteCardCustomRate(liveCard.id, target)) },
-            onDismiss = { cardForRates = null }
         )
     }
 
@@ -199,9 +187,6 @@ fun SettingsScreen(vm: CalculatorViewModel, modifier: Modifier = Modifier) {
                     Column(modifier = Modifier.weight(1f)) {
                         Text(card.name, color = colors.textPrimary, fontSize = 15.sp, fontWeight = FontWeight.Medium)
                         Text(feeText, color = if (card.markupPercent > 0 || card.minFeeAmount > 0) colors.warningColor else colors.positiveColor, fontSize = 12.sp)
-                    }
-                    IconButton(onClick = { cardForRates = card }) {
-                        Icon(Icons.Default.SwapHoriz, "Rates", tint = if (card.customRates.isNotEmpty()) colors.operator else colors.textSecondary, modifier = Modifier.size(18.dp))
                     }
                     IconButton(onClick = { editingCard = card; showCardDialog = true }) {
                         Icon(Icons.Default.Edit, "Edit", tint = colors.textSecondary, modifier = Modifier.size(18.dp))
@@ -504,90 +489,15 @@ fun SettingsScreen(vm: CalculatorViewModel, modifier: Modifier = Modifier) {
 }
 
 @Composable
-private fun CardRatesDialog(
-    card: CardProfile,
-    availableCurrencies: List<String>,
-    liveRates: Map<String, Double>,
-    defaultTarget: String,
-    defaultBase: String,
-    onRateSet: (target: String, base: String, rate: Double) -> Unit,
-    onRateDelete: (target: String) -> Unit,
-    onDismiss: () -> Unit
-) {
-    val colors = LocalAppColors.current
-    var showAddRate by remember { mutableStateOf(false) }
-    var editingTarget by remember { mutableStateOf("") }
-
-    if (showAddRate) {
-        val existing = card.customRates[editingTarget]
-        CustomRateDialog(
-            initialTarget = editingTarget,
-            initialBase = existing?.base ?: defaultBase,
-            initialRate = if (existing != null) "%.4f".format(existing.rate).trimEnd('0').trimEnd('.') else "",
-            defaultTarget = defaultTarget,
-            availableCurrencies = availableCurrencies,
-            liveRates = liveRates,
-            onSave = { base, target, rate -> onRateSet(target, base, rate); showAddRate = false; editingTarget = "" },
-            onDismiss = { showAddRate = false; editingTarget = "" }
-        )
-    }
-
-    Dialog(onDismissRequest = onDismiss) {
-        Surface(shape = RoundedCornerShape(16.dp), color = colors.surface) {
-            Column(modifier = Modifier.padding(20.dp)) {
-                Text("${card.name} — rates", color = colors.textPrimary, fontSize = 17.sp, fontWeight = FontWeight.SemiBold)
-                Spacer(Modifier.height(4.dp))
-                Text("Override the live rate for this card. Falls back to the live rate for currencies without a custom entry.", color = colors.textMuted, fontSize = 12.sp, lineHeight = 16.sp)
-                Spacer(Modifier.height(12.dp))
-
-                if (card.customRates.isEmpty()) {
-                    Text("No custom rates yet.", color = colors.textMuted, fontSize = 13.sp, modifier = Modifier.padding(vertical = 8.dp))
-                } else {
-                    card.customRates.forEach { (target, entry) ->
-                        Row(
-                            modifier = Modifier.fillMaxWidth().padding(vertical = 4.dp),
-                            verticalAlignment = Alignment.CenterVertically
-                        ) {
-                            Column(modifier = Modifier.weight(1f)) {
-                                Text("1 ${entry.base} = ${"%.4f".format(entry.rate).trimEnd('0').trimEnd('.')} $target", color = colors.textPrimary, fontSize = 14.sp)
-                            }
-                            IconButton(onClick = { editingTarget = target; showAddRate = true }, modifier = Modifier.size(36.dp)) {
-                                Icon(Icons.Default.Edit, "Edit", tint = colors.textSecondary, modifier = Modifier.size(16.dp))
-                            }
-                            IconButton(onClick = { onRateDelete(target) }, modifier = Modifier.size(36.dp)) {
-                                Icon(Icons.Default.Close, "Delete", tint = colors.textSecondary, modifier = Modifier.size(16.dp))
-                            }
-                        }
-                    }
-                }
-
-                Spacer(Modifier.height(8.dp))
-                OutlinedButton(
-                    onClick = { editingTarget = ""; showAddRate = true },
-                    modifier = Modifier.fillMaxWidth(),
-                    shape = RoundedCornerShape(10.dp),
-                    colors = ButtonDefaults.outlinedButtonColors(contentColor = colors.operator),
-                    border = BorderStroke(1.dp, colors.operator)
-                ) {
-                    Icon(Icons.Default.Add, null, modifier = Modifier.size(16.dp))
-                    Spacer(Modifier.width(6.dp))
-                    Text("Add rate", fontSize = 14.sp)
-                }
-                Spacer(Modifier.height(4.dp))
-                TextButton(onClick = onDismiss, modifier = Modifier.align(Alignment.End)) {
-                    Text("Done", color = colors.fromAmountColor)
-                }
-            }
-        }
-    }
-}
-
-@Composable
 private fun CardProfileDialog(
     existing: CardProfile?,
     availableCurrencies: List<String>,
     defaultCurrency: String,
+    liveRates: Map<String, Double>,
+    defaultRateTarget: String,
     onSave: (name: String, markupPercent: Double, minFeeAmount: Double, minFeeCurrency: String) -> Unit,
+    onRateSet: (target: String, base: String, rate: Double) -> Unit,
+    onRateDelete: (target: String) -> Unit,
     onDismiss: () -> Unit
 ) {
     val colors = LocalAppColors.current
@@ -599,17 +509,40 @@ private fun CardProfileDialog(
     var minFeeCurrency by remember(existing?.id, defaultCurrency) { mutableStateOf(
         existing?.minFeeCurrency?.takeIf { it.isNotEmpty() } ?: defaultCurrency
     ) }
+    var showAddRate by remember { mutableStateOf(false) }
+    var editingRateTarget by remember { mutableStateOf("") }
 
     val snappedMarkup = ((markup / 0.25f).roundToInt() * 0.25).coerceIn(0.0, 5.0)
     val markupLabel = if (snappedMarkup == 0.0) "Off (0%)" else "${"%.2f".format(snappedMarkup).trimEnd('0').trimEnd('.')}%"
     val minFeeAmount = minFeeInput.toDoubleOrNull() ?: 0.0
 
-    AlertDialog(
-        onDismissRequest = onDismiss,
-        containerColor = colors.surface,
-        title = { Text(if (existing == null) "Add card" else "Edit card", color = colors.textPrimary) },
-        text = {
-            Column {
+    if (showAddRate && existing != null) {
+        val existingRate = existing.customRates[editingRateTarget]
+        CustomRateDialog(
+            initialTarget = editingRateTarget,
+            initialBase = existingRate?.base ?: defaultCurrency,
+            initialRate = if (existingRate != null) "%.4f".format(existingRate.rate).trimEnd('0').trimEnd('.') else "",
+            defaultTarget = defaultRateTarget,
+            availableCurrencies = availableCurrencies,
+            liveRates = liveRates,
+            onSave = { base, target, rate -> onRateSet(target, base, rate); showAddRate = false; editingRateTarget = "" },
+            onDismiss = { showAddRate = false; editingRateTarget = "" }
+        )
+    }
+
+    Dialog(onDismissRequest = onDismiss) {
+        Surface(shape = RoundedCornerShape(16.dp), color = colors.surface) {
+            Column(
+                modifier = Modifier
+                    .padding(20.dp)
+                    .verticalScroll(rememberScrollState())
+            ) {
+                Text(
+                    if (existing == null) "Add card" else "Edit card",
+                    color = colors.textPrimary, fontSize = 17.sp, fontWeight = FontWeight.SemiBold
+                )
+                Spacer(Modifier.height(16.dp))
+
                 OutlinedTextField(
                     value = name,
                     onValueChange = { name = it },
@@ -662,16 +595,61 @@ private fun CardProfileDialog(
                     availableCurrencies = availableCurrencies,
                     onSelected = { minFeeCurrency = it }
                 )
+
+                if (existing != null) {
+                    Spacer(Modifier.height(20.dp))
+                    HorizontalDivider(color = colors.divider)
+                    Spacer(Modifier.height(12.dp))
+                    Text("Custom exchange rates", color = colors.textPrimary, fontSize = 14.sp, fontWeight = FontWeight.Medium)
+                    Text("Override the live rate for specific currencies. Falls back to live rate if not set.", color = colors.textMuted, fontSize = 12.sp, lineHeight = 16.sp)
+                    Spacer(Modifier.height(8.dp))
+                    if (existing.customRates.isEmpty()) {
+                        Text("No custom rates yet.", color = colors.textMuted, fontSize = 13.sp, modifier = Modifier.padding(vertical = 4.dp))
+                    } else {
+                        existing.customRates.forEach { (target, entry) ->
+                            Row(
+                                modifier = Modifier.fillMaxWidth().padding(vertical = 2.dp),
+                                verticalAlignment = Alignment.CenterVertically
+                            ) {
+                                Text(
+                                    "1 ${entry.base} = ${"%.4f".format(entry.rate).trimEnd('0').trimEnd('.')} $target",
+                                    color = colors.textPrimary, fontSize = 13.sp, modifier = Modifier.weight(1f)
+                                )
+                                IconButton(onClick = { editingRateTarget = target; showAddRate = true }, modifier = Modifier.size(32.dp)) {
+                                    Icon(Icons.Default.Edit, "Edit", tint = colors.textSecondary, modifier = Modifier.size(15.dp))
+                                }
+                                IconButton(onClick = { onRateDelete(target) }, modifier = Modifier.size(32.dp)) {
+                                    Icon(Icons.Default.Close, "Delete", tint = colors.textSecondary, modifier = Modifier.size(15.dp))
+                                }
+                            }
+                        }
+                    }
+                    Spacer(Modifier.height(8.dp))
+                    OutlinedButton(
+                        onClick = { editingRateTarget = ""; showAddRate = true },
+                        modifier = Modifier.fillMaxWidth(),
+                        shape = RoundedCornerShape(10.dp),
+                        colors = ButtonDefaults.outlinedButtonColors(contentColor = colors.operator),
+                        border = BorderStroke(1.dp, colors.operator)
+                    ) {
+                        Icon(Icons.Default.Add, null, modifier = Modifier.size(16.dp))
+                        Spacer(Modifier.width(6.dp))
+                        Text("Add rate", fontSize = 14.sp)
+                    }
+                }
+
+                Spacer(Modifier.height(16.dp))
+                Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.End) {
+                    TextButton(onClick = onDismiss) { Text("Cancel", color = colors.textSecondary) }
+                    Spacer(Modifier.width(8.dp))
+                    TextButton(
+                        onClick = { if (name.isNotBlank()) onSave(name.trim(), snappedMarkup, minFeeAmount, if (minFeeAmount > 0) minFeeCurrency else "") },
+                        enabled = name.isNotBlank()
+                    ) { Text("Save", color = colors.fromAmountColor) }
+                }
             }
-        },
-        confirmButton = {
-            TextButton(
-                onClick = { if (name.isNotBlank()) onSave(name.trim(), snappedMarkup, minFeeAmount, if (minFeeAmount > 0) minFeeCurrency else "") },
-                enabled = name.isNotBlank()
-            ) { Text("Save", color = colors.fromAmountColor) }
-        },
-        dismissButton = { TextButton(onClick = onDismiss) { Text("Cancel", color = colors.textSecondary) } }
-    )
+        }
+    }
 }
 
 @Composable

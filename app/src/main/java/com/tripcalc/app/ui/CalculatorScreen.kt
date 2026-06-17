@@ -245,12 +245,31 @@ fun AboutScreen(modifier: Modifier = Modifier) {
         Spacer(Modifier.height(32.dp))
 
         Text(
-            text = "A simple, ad-free calculator with live dual-currency conversion. " +
-                    "Enter any amount and see the equivalent in your chosen currency pair as you type.",
+            text = "Your travel companion for money and more. TripCalc gives you live currency conversion across 161 currencies, with support for card fee profiles so you always know what you'll actually pay.",
             color = colors.textSecondary,
             fontSize = 15.sp,
             textAlign = TextAlign.Center,
             lineHeight = 22.sp
+        )
+
+        Spacer(Modifier.height(16.dp))
+
+        Text(
+            text = "Also includes a tip calculator, fuel economy converter, distance and temperature tools, and an international clothing and shoe size guide — everything you need when you're away from home.",
+            color = colors.textSecondary,
+            fontSize = 15.sp,
+            textAlign = TextAlign.Center,
+            lineHeight = 22.sp
+        )
+
+        Spacer(Modifier.height(16.dp))
+
+        Text(
+            text = "No ads. No account. No tracking.",
+            color = colors.textPrimary,
+            fontSize = 14.sp,
+            textAlign = TextAlign.Center,
+            fontWeight = FontWeight.Medium
         )
 
         Spacer(Modifier.height(20.dp))
