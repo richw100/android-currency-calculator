@@ -30,8 +30,8 @@ fun HistoryScreen(
     val state by vm.uiState.collectAsStateWithLifecycle()
     val colors = LocalAppColors.current
 
-    // Timestamp of the entry currently being annotated; null = dialog closed
     var editingNoteTimestamp by remember { mutableStateOf<Long?>(null) }
+    var pendingRestore by remember { mutableStateOf<HistoryEntry?>(null) }
 
     editingNoteTimestamp?.let { ts ->
         val entry = state.history.find { it.timestamp == ts }
@@ -45,6 +45,50 @@ fun HistoryScreen(
                 onDismiss = { editingNoteTimestamp = null }
             )
         }
+    }
+
+    pendingRestore?.let { entry ->
+        val colors = LocalAppColors.current
+        val currenciesChange = entry.fromCurrency != state.fromCurrency || entry.toCurrency != state.toCurrency
+        AlertDialog(
+            onDismissRequest = { pendingRestore = null },
+            containerColor = colors.surface,
+            title = { Text("Restore calculation?", color = colors.textPrimary) },
+            text = {
+                Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
+                    if (currenciesChange) {
+                        Text(
+                            "This will switch your currencies from ${state.fromCurrency} / ${state.toCurrency} to ${entry.fromCurrency} / ${entry.toCurrency}.",
+                            color = colors.textSecondary, fontSize = 14.sp, lineHeight = 20.sp
+                        )
+                    }
+                    if (entry.cardName != null) {
+                        val pctStr = entry.cardMarkupPercent?.let {
+                            if (it == 0.0) "0%" else "${"%.2f".format(it).trimEnd('0').trimEnd('.')}%"
+                        } ?: "0%"
+                        val minStr = if (entry.cardMinFeeAmount != null && entry.cardMinFeeCurrency != null)
+                            " or min. ${"%.2f".format(entry.cardMinFeeAmount).trimEnd('0').trimEnd('.')} ${entry.cardMinFeeCurrency}"
+                        else ""
+                        Text(
+                            "Originally calculated with card \"${entry.cardName}\" ($pctStr fee$minStr). Your current card selection will not change.",
+                            color = colors.warningColor, fontSize = 14.sp, lineHeight = 20.sp
+                        )
+                    }
+                }
+            },
+            confirmButton = {
+                TextButton(onClick = {
+                    vm.onAction(CalculatorAction.RestoreHistory(entry))
+                    pendingRestore = null
+                    onEntryRestored()
+                }) { Text("Restore", color = colors.fromAmountColor) }
+            },
+            dismissButton = {
+                TextButton(onClick = { pendingRestore = null }) {
+                    Text("Cancel", color = colors.textSecondary)
+                }
+            }
+        )
     }
 
     Column(modifier = modifier.fillMaxSize()) {
@@ -90,8 +134,14 @@ fun HistoryScreen(
                     HistoryEntryCard(
                         entry = entry,
                         onClick = {
-                            vm.onAction(CalculatorAction.RestoreHistory(entry))
-                            onEntryRestored()
+                            val currenciesMatch = entry.fromCurrency == state.fromCurrency && entry.toCurrency == state.toCurrency
+                            val hasCardInfo = entry.cardName != null
+                            if (currenciesMatch && !hasCardInfo) {
+                                vm.onAction(CalculatorAction.RestoreHistory(entry))
+                                onEntryRestored()
+                            } else {
+                                pendingRestore = entry
+                            }
                         },
                         onDelete = { vm.onAction(CalculatorAction.DeleteHistoryEntry(entry.timestamp)) },
                         onEditNote = { editingNoteTimestamp = entry.timestamp }

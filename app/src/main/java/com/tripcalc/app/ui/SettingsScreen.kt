@@ -591,12 +591,12 @@ private fun CardProfileDialog(
     onDismiss: () -> Unit
 ) {
     val colors = LocalAppColors.current
-    var name by remember { mutableStateOf(existing?.name ?: "") }
-    var markup by remember { mutableStateOf(existing?.markupPercent?.toFloat() ?: 0f) }
-    var minFeeInput by remember { mutableStateOf(
+    var name by remember(existing?.id) { mutableStateOf(existing?.name ?: "") }
+    var markup by remember(existing?.id) { mutableStateOf(existing?.markupPercent?.toFloat() ?: 0f) }
+    var minFeeInput by remember(existing?.id) { mutableStateOf(
         if ((existing?.minFeeAmount ?: 0.0) > 0) "%.2f".format(existing!!.minFeeAmount).trimEnd('0').trimEnd('.') else ""
     ) }
-    var minFeeCurrency by remember { mutableStateOf(
+    var minFeeCurrency by remember(existing?.id, defaultCurrency) { mutableStateOf(
         existing?.minFeeCurrency?.takeIf { it.isNotEmpty() } ?: defaultCurrency
     ) }
 

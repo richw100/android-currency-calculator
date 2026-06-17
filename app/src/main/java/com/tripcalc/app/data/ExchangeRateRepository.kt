@@ -294,4 +294,13 @@ class ExchangeRateRepository(private val context: Context) {
         val prefs = context.dataStore.data.first()
         return Pair(prefs[mensFromKey] ?: "US/UK", prefs[mensToKey] ?: "EU")
     }
+
+    private val helpHintSeenKey = booleanPreferencesKey("help_hint_seen")
+
+    suspend fun saveHelpHintSeen() {
+        context.dataStore.edit { it[helpHintSeenKey] = true }
+    }
+
+    suspend fun loadHelpHintSeen(): Boolean =
+        context.dataStore.data.first()[helpHintSeenKey] ?: false
 }

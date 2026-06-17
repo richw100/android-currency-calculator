@@ -133,7 +133,11 @@ data class HistoryEntry(
     val toCurrency: String,
     val timestamp: Long,
     val conversionMode: String = "CURRENCY",
-    val note: String? = null
+    val note: String? = null,
+    val cardName: String? = null,
+    val cardMarkupPercent: Double? = null,
+    val cardMinFeeAmount: Double? = null,
+    val cardMinFeeCurrency: String? = null
 )
 
 data class CalculatorUiState(
@@ -155,6 +159,7 @@ data class CalculatorUiState(
     val isError: Boolean = false,
     val history: List<HistoryEntry> = emptyList(),
     val isOffline: Boolean = false,
+    val helpHintSeen: Boolean = true,
     val darkModePref: DarkModePref = DarkModePref.SYSTEM,
     val accentScheme: AccentScheme = AccentScheme.TEAL_GREEN,
     val conversionMode: ConversionMode = ConversionMode.CURRENCY,
@@ -232,6 +237,7 @@ sealed class CalculatorAction {
     data class SetShoeCountries(val from: String, val to: String) : CalculatorAction()
     data class SetWomensCountries(val from: String, val to: String) : CalculatorAction()
     data class SetMensCountries(val from: String, val to: String) : CalculatorAction()
+    object DismissHelpHint : CalculatorAction()
 }
 
 private data class BracketState(val firstOperand: Double?, val pendingOp: Char?)
@@ -279,7 +285,8 @@ class CalculatorViewModel(application: Application) : AndroidViewModel(applicati
             val (shoeFrom, shoeTo) = repository.loadShoeCountries()
             val (womensFrom, womensTo) = repository.loadWomensCountries()
             val (mensFrom, mensTo) = repository.loadMensCountries()
-            _uiState.update { it.copy(toCurrency = to, fromCurrency = from, recentCurrencies = recents, customRates = customRates, hapticEnabled = hapticEnabled, history = history, darkModePref = darkModePref, accentScheme = accentScheme, defaultTipPercent = defaultTipPercent, tipPercent = defaultTipPercent, customTipPercent = customTipPercent, fuelUseUkGallons = fuelUseUkGallons, swapZeroDot = swapZeroDot, enabledModes = enabledModes, enabledDistancePairs = enabledDistancePairs, cardProfiles = cardProfiles, activeCardId = activeCardId, sizeCategory = sizeCategory, shoeIsMens = shoeIsMens, shoeFromCountry = shoeFrom, shoeToCountry = shoeTo, womensFromCountry = womensFrom, womensToCountry = womensTo, mensFromCountry = mensFrom, mensToCountry = mensTo) }
+            val helpHintSeen = repository.loadHelpHintSeen()
+            _uiState.update { it.copy(toCurrency = to, fromCurrency = from, recentCurrencies = recents, customRates = customRates, hapticEnabled = hapticEnabled, history = history, darkModePref = darkModePref, accentScheme = accentScheme, defaultTipPercent = defaultTipPercent, tipPercent = defaultTipPercent, customTipPercent = customTipPercent, fuelUseUkGallons = fuelUseUkGallons, swapZeroDot = swapZeroDot, enabledModes = enabledModes, enabledDistancePairs = enabledDistancePairs, cardProfiles = cardProfiles, activeCardId = activeCardId, sizeCategory = sizeCategory, shoeIsMens = shoeIsMens, shoeFromCountry = shoeFrom, shoeToCountry = shoeTo, womensFromCountry = womensFrom, womensToCountry = womensTo, mensFromCountry = mensFrom, mensToCountry = mensTo, helpHintSeen = helpHintSeen) }
             fetchRates(forceRefresh = false)
         }
     }
@@ -387,11 +394,17 @@ class CalculatorViewModel(application: Application) : AndroidViewModel(applicati
                 return
             }
             is CalculatorAction.RestoreHistory -> {
-                currentInput = action.entry.display
+                val entry = action.entry
+                currentInput = entry.display
                 firstOperand = null; pendingOp = null
                 bracketStack.clear(); expressionDisplay.clear()
                 justCalculated = true; shouldResetInput = false
-                _uiState.update { it.copy(isError = false) }
+                _uiState.update { it.copy(
+                    isError = false,
+                    fromCurrency = entry.fromCurrency,
+                    toCurrency = entry.toCurrency
+                ) }
+                viewModelScope.launch { repository.saveCurrencyPrefs(entry.toCurrency, entry.fromCurrency) }
                 updateDisplay(); return
             }
             is CalculatorAction.ClearHistory -> {
@@ -547,6 +560,11 @@ class CalculatorViewModel(application: Application) : AndroidViewModel(applicati
             is CalculatorAction.SetMensCountries -> {
                 _uiState.update { it.copy(mensFromCountry = action.from, mensToCountry = action.to) }
                 viewModelScope.launch { repository.saveMensCountries(action.from, action.to) }
+                return
+            }
+            is CalculatorAction.DismissHelpHint -> {
+                _uiState.update { it.copy(helpHintSeen = true) }
+                viewModelScope.launch { repository.saveHelpHintSeen() }
                 return
             }
             is CalculatorAction.DeleteHistoryEntry -> {
@@ -757,6 +775,8 @@ class CalculatorViewModel(application: Application) : AndroidViewModel(applicati
         val toTempUnit = if (state.tempUnit == TempUnit.CELSIUS) TempUnit.FAHRENHEIT else TempUnit.CELSIUS
         val pctLabel = if (state.tipPercent == state.tipPercent.toLong().toDouble())
             state.tipPercent.toLong().toString() else "%.1f".format(state.tipPercent)
+        val activeCard = if (state.conversionMode == ConversionMode.CURRENCY)
+            state.cardProfiles.find { it.id == state.activeCardId } else null
         val entry = HistoryEntry(
             display = state.display,
             expression = state.expression,
@@ -777,7 +797,11 @@ class CalculatorViewModel(application: Application) : AndroidViewModel(applicati
                 ConversionMode.CURRENCY -> state.toCurrency
             },
             timestamp = System.currentTimeMillis(),
-            conversionMode = state.conversionMode.name
+            conversionMode = state.conversionMode.name,
+            cardName = activeCard?.name,
+            cardMarkupPercent = activeCard?.markupPercent,
+            cardMinFeeAmount = activeCard?.minFeeAmount?.takeIf { it > 0 },
+            cardMinFeeCurrency = activeCard?.minFeeCurrency?.takeIf { it.isNotEmpty() }
         )
         val updated = (listOf(entry) + state.history).take(50)
         _uiState.update { it.copy(history = updated) }

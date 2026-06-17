@@ -19,6 +19,7 @@ import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.History
+import androidx.compose.material.icons.filled.HelpOutline
 import androidx.compose.material.icons.filled.Info
 import androidx.compose.material.icons.filled.Menu
 import androidx.compose.material.icons.filled.Refresh
@@ -76,7 +77,7 @@ fun currencyName(code: String) = currencyNameCache.getOrPut(code) {
 
 // ── Root composable ──────────────────────────────────────────────────────────
 
-private enum class Screen { Calculator, History, Settings, About, Converter }
+private enum class Screen { Calculator, History, Settings, About, Converter, Help }
 
 @Composable
 fun AppScreen() {
@@ -95,6 +96,25 @@ fun AppScreen() {
 
     CalcAppTheme(darkTheme = effectiveIsDark) {
         CompositionLocalProvider(LocalAppColors provides colors) {
+            if (!state.helpHintSeen) {
+                AlertDialog(
+                    onDismissRequest = { vm.onAction(CalculatorAction.DismissHelpHint) },
+                    containerColor = colors.surface,
+                    title = { Text("👋 Welcome to TripCalc", color = colors.textPrimary, fontSize = 17.sp) },
+                    text = {
+                        Text(
+                            "Tap the menu (☰) → Help to discover all the features — card profiles, custom rates, size converter, and more.",
+                            color = colors.textSecondary, fontSize = 14.sp, lineHeight = 21.sp
+                        )
+                    },
+                    confirmButton = {
+                        TextButton(onClick = { vm.onAction(CalculatorAction.DismissHelpHint) }) {
+                            Text("Got it", color = colors.fromAmountColor)
+                        }
+                    }
+                )
+            }
+
             Column(
                 modifier = Modifier
                     .fillMaxSize()
@@ -154,6 +174,11 @@ fun AppScreen() {
                                     onClick = { screen = Screen.Settings; menuExpanded = false }
                                 )
                                 DropdownMenuItem(
+                                    text = { Text("Help") },
+                                    leadingIcon = { Icon(Icons.Default.HelpOutline, null) },
+                                    onClick = { screen = Screen.Help; menuExpanded = false }
+                                )
+                                DropdownMenuItem(
                                     text = { Text("About") },
                                     leadingIcon = { Icon(Icons.Default.Info, null) },
                                     onClick = { screen = Screen.About; menuExpanded = false }
@@ -175,6 +200,7 @@ fun AppScreen() {
                     Screen.About      -> AboutScreen(modifier = Modifier.weight(1f))
                     Screen.Settings   -> SettingsScreen(vm = vm, modifier = Modifier.weight(1f))
                     Screen.Converter  -> SizeConverterScreen(vm = vm, modifier = Modifier.weight(1f))
+                    Screen.Help       -> HelpScreen(modifier = Modifier.weight(1f))
                 }
             }
         }
@@ -1569,5 +1595,107 @@ fun CalcButton(
         contentPadding = PaddingValues(0.dp)
     ) {
         Text(text = label, fontSize = 28.sp, fontWeight = FontWeight.Medium)
+    }
+}
+
+// ── Help screen ───────────────────────────────────────────────────────────────
+
+@Composable
+fun HelpScreen(modifier: Modifier = Modifier) {
+    val colors = LocalAppColors.current
+
+    Column(
+        modifier = modifier
+            .fillMaxSize()
+            .verticalScroll(rememberScrollState())
+            .padding(horizontal = 20.dp, vertical = 16.dp)
+    ) {
+        Text("Help", color = colors.textPrimary, fontSize = 22.sp, fontWeight = FontWeight.Bold)
+        Spacer(Modifier.height(16.dp))
+
+        HelpSection("Currency Converter") {
+            HelpItem("Enter an amount", "Type a number on the keypad — the home-currency equivalent updates as you type. The entered amount is always treated as the local (From) currency.")
+            HelpItem("Change currencies", "Tap either currency button to open the picker. Recent currencies appear at the top. Tap ⇄ to swap From and To.")
+            HelpItem("Custom rate (★)", "A ★ next to the exchange rate means a custom or card-specific rate is active instead of the live rate.")
+            HelpItem("Offline", "If rates can't be fetched, the last cached rates are used and an offline indicator is shown. Rates are refreshed every 24 hours.")
+            HelpItem("Online", "Rates are from er-api.com and are refreshed every 24 hours or when the refresh button is pressed. (Visa and Mastercard rates are not officially possible - sorry!).")
+        }
+
+        HelpSection("Card Profiles") {
+            HelpItem("What they are", "Named profiles for your payment cards, each with its own foreign transaction fee and optional exchange rate overrides.")
+            HelpItem("Adding a card", "Go to Settings → Card Profiles → Add card. Set a name and a fee percentage (e.g. 2.75%).")
+            HelpItem("Minimum fee", "Some cards charge a minimum fee (e.g. 3% or £3, whichever is greater). Set this in the card editor — when the minimum is higher than the percentage fee it is applied instead, and the rate label shows 'min. £3.00 GBP'.")
+            HelpItem("Per-card rates", "Tap ⇄ on a card in Settings to set custom exchange rates for that card. Useful when a card offers a fixed or worse-than-live rate for a specific currency.")
+            HelpItem("Selecting a card", "When cards exist, a chip row appears above the rate label on the Currency tab. Tap a chip to apply that card's fees and rates, or tap 'No card fee' to use live rates only.")
+        }
+
+        HelpSection("Custom Exchange Rates") {
+            HelpItem("Global overrides", "Settings → Exchange Rates → Add rate. Enter a base currency, target currency, and your rate. The ★ symbol appears whenever a custom rate is in use.")
+            HelpItem("Format", "Rates are entered as '1 base = X target', e.g. 1 USD = 0.85 GBP. The live rate is pre-filled as a starting point.")
+            HelpItem("Priority", "Card-specific rates take priority over global custom rates, which take priority over live rates.")
+        }
+
+        HelpSection("Tip Calculator") {
+            HelpItem("Basic use", "Enter the bill amount then select a tip percentage from the buttons. The tip and total update instantly.")
+            HelpItem("Custom tip %", "The last tip button shows your custom percentage. Tap it once to select it, tap it again to edit the value. You can also set it in Settings.")
+            HelpItem("Send to FX", "Tap 'Send total to FX' to pass the tipped total straight to the Currency Converter.")
+            HelpItem("Default tip %", "Sets the tip percentage pre-selected when you open the Tip tab. Set in Settings → Default tip %")
+        }
+
+        HelpSection("Fuel Calculator") {
+            HelpItem("Cost per distance", "Enter your car's fuel consumption to convert between mpg and L/100km.")
+            HelpItem("UK vs US gallons", "Toggle between UK imperial gallons and US gallons in Settings → Fuel.")
+        }
+
+        HelpSection("Distance Converter") {
+            HelpItem("Converting", "Enter a distance in the From unit; the To unit updates live. Tap ⇄ to swap direction.")
+            HelpItem("Additional Pairs", "Enable or disable additional units (miles↔km, inch↔cm, feet↔metre, SqFeet↔SqMetre) in Settings → Distance.")
+        }
+
+        HelpSection("Temperature Converter") {
+            HelpItem("Units", "Converts between °C and °F. Tap ⇄ to swap direction.")
+        }
+
+        HelpSection("Size Converter") {
+            HelpItem("Opening it", "Tap the menu (☰) → Size Converter.")
+            HelpItem("Categories", "Switch between Shoes (men's or women's), Women's Clothing, and Men's Clothing using the tabs at the top.")
+            HelpItem("From / To country", "Tap the country buttons to change. Your selections are remembered separately for each category.")
+            HelpItem("Finding your size", "Tap a size in the From column — the matching To size is highlighted. Tap again to deselect.")
+        }
+
+        HelpSection("History") {
+            HelpItem("Logging", "Every time you press = on the Currency tab, the conversion is saved (up to 50 entries).")
+            HelpItem("Restoring", "Tap any history entry to restore the currencies and amount to the calculator.")
+            HelpItem("Annotating", "Tap the 📝 icon on any history entry to add a note — useful for labelling what a conversion was for.")
+            HelpItem("Opening it", "Tap the menu (☰) → History.")
+        }
+
+        HelpSection("Settings") {
+            HelpItem("Appearance", "Choose light, dark, or system theme, and pick an accent colour.")
+            HelpItem("Haptics", "Toggle vibration feedback on button presses.")
+            HelpItem("Tab visibility", "Show or hide individual calculator tabs (Tip, Fuel, Distance, Temperature) to keep the tab bar uncluttered.")
+            HelpItem("Default tip %", "Sets the tip percentage pre-selected when you open the Tip tab.")
+        }
+
+        Spacer(Modifier.height(24.dp))
+    }
+}
+
+@Composable
+private fun HelpSection(title: String, content: @Composable () -> Unit) {
+    val colors = LocalAppColors.current
+    Spacer(Modifier.height(8.dp))
+    Text(title, color = colors.operator, fontSize = 14.sp, fontWeight = FontWeight.SemiBold, letterSpacing = 0.5.sp)
+    HorizontalDivider(color = colors.divider, thickness = 1.dp, modifier = Modifier.padding(top = 4.dp, bottom = 8.dp))
+    content()
+    Spacer(Modifier.height(8.dp))
+}
+
+@Composable
+private fun HelpItem(label: String, detail: String) {
+    val colors = LocalAppColors.current
+    Row(modifier = Modifier.padding(bottom = 8.dp)) {
+        Text(label, color = colors.textPrimary, fontSize = 14.sp, fontWeight = FontWeight.Medium, modifier = Modifier.width(130.dp))
+        Text(detail, color = colors.textSecondary, fontSize = 14.sp, lineHeight = 20.sp, modifier = Modifier.weight(1f))
     }
 }
