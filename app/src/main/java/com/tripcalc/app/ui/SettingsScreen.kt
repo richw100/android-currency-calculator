@@ -60,9 +60,9 @@ fun SettingsScreen(vm: CalculatorViewModel, modifier: Modifier = Modifier) {
             defaultCurrency = state.toCurrency,
             liveRates = state.liveRates,
             defaultRateTarget = state.fromCurrency,
-            onSave = { name, pct, minFee, minCur ->
-                if (editingCard == null) vm.onAction(CalculatorAction.AddCardProfile(name, pct, minFee, minCur))
-                else vm.onAction(CalculatorAction.UpdateCardProfile(editingCard!!.id, name, pct, minFee, minCur))
+            onSave = { name, pct, minFee, minCur, useGlobal ->
+                if (editingCard == null) vm.onAction(CalculatorAction.AddCardProfile(name, pct, minFee, minCur, useGlobal))
+                else vm.onAction(CalculatorAction.UpdateCardProfile(editingCard!!.id, name, pct, minFee, minCur, useGlobal))
                 showCardDialog = false; editingCard = null
             },
             onRateSet = { target, base, rate -> editingCard?.let { vm.onAction(CalculatorAction.SetCardCustomRate(it.id, target, base, rate)) } },
@@ -495,7 +495,7 @@ private fun CardProfileDialog(
     defaultCurrency: String,
     liveRates: Map<String, Double>,
     defaultRateTarget: String,
-    onSave: (name: String, markupPercent: Double, minFeeAmount: Double, minFeeCurrency: String) -> Unit,
+    onSave: (name: String, markupPercent: Double, minFeeAmount: Double, minFeeCurrency: String, useGlobalRates: Boolean) -> Unit,
     onRateSet: (target: String, base: String, rate: Double) -> Unit,
     onRateDelete: (target: String) -> Unit,
     onDismiss: () -> Unit
@@ -509,6 +509,7 @@ private fun CardProfileDialog(
     var minFeeCurrency by remember(existing?.id, defaultCurrency) { mutableStateOf(
         existing?.minFeeCurrency?.takeIf { it.isNotEmpty() } ?: defaultCurrency
     ) }
+    var useGlobalRates by remember(existing?.id) { mutableStateOf(existing?.useGlobalRates ?: false) }
     var showAddRate by remember { mutableStateOf(false) }
     var editingRateTarget by remember { mutableStateOf("") }
 
@@ -597,11 +598,14 @@ private fun CardProfileDialog(
                 )
 
                 if (existing != null) {
-                    Spacer(Modifier.height(20.dp))
+                    Spacer(Modifier.height(16.dp))
                     HorizontalDivider(color = colors.divider)
                     Spacer(Modifier.height(12.dp))
                     Text("Custom exchange rates", color = colors.textPrimary, fontSize = 14.sp, fontWeight = FontWeight.Medium)
-                    Text("Override the live rate for specific currencies. Falls back to live rate if not set.", color = colors.textMuted, fontSize = 12.sp, lineHeight = 16.sp)
+                    Text(
+                        "Rate used: card rate → global custom rate (if enabled below) → live rate.",
+                        color = colors.textMuted, fontSize = 12.sp, lineHeight = 16.sp
+                    )
                     Spacer(Modifier.height(8.dp))
                     if (existing.customRates.isEmpty()) {
                         Text("No custom rates yet.", color = colors.textMuted, fontSize = 13.sp, modifier = Modifier.padding(vertical = 4.dp))
@@ -636,6 +640,21 @@ private fun CardProfileDialog(
                         Spacer(Modifier.width(6.dp))
                         Text("Add rate", fontSize = 14.sp)
                     }
+                    Spacer(Modifier.height(4.dp))
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Column(modifier = Modifier.weight(1f)) {
+                            Text("Use global custom rates as fallback", color = colors.textPrimary, fontSize = 13.sp)
+                            Text("Apply Settings → Exchange Rates when no card rate is set", color = colors.textMuted, fontSize = 12.sp, lineHeight = 16.sp)
+                        }
+                        Checkbox(
+                            checked = useGlobalRates,
+                            onCheckedChange = { useGlobalRates = it },
+                            colors = CheckboxDefaults.colors(checkedColor = colors.operator)
+                        )
+                    }
                 }
 
                 Spacer(Modifier.height(16.dp))
@@ -643,7 +662,7 @@ private fun CardProfileDialog(
                     TextButton(onClick = onDismiss) { Text("Cancel", color = colors.textSecondary) }
                     Spacer(Modifier.width(8.dp))
                     TextButton(
-                        onClick = { if (name.isNotBlank()) onSave(name.trim(), snappedMarkup, minFeeAmount, if (minFeeAmount > 0) minFeeCurrency else "") },
+                        onClick = { if (name.isNotBlank()) onSave(name.trim(), snappedMarkup, minFeeAmount, if (minFeeAmount > 0) minFeeCurrency else "", useGlobalRates) },
                         enabled = name.isNotBlank()
                     ) { Text("Save", color = colors.fromAmountColor) }
                 }

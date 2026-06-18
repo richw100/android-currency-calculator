@@ -1644,14 +1644,16 @@ fun HelpScreen(modifier: Modifier = Modifier) {
             HelpItem("What they are", "Named profiles for your payment cards, each with its own foreign transaction fee and optional exchange rate overrides.")
             HelpItem("Adding a card", "Go to Settings → Card Profiles → Add card. Set a name and a fee percentage (e.g. 2.75%).")
             HelpItem("Minimum fee", "Some cards charge a minimum fee (e.g. 3% or £3, whichever is greater). Set this in the card editor — when the minimum is higher than the percentage fee it is applied instead, and the rate label shows 'min. £3.00 GBP'.")
-            HelpItem("Per-card rates", "Tap ⇄ on a card in Settings to set custom exchange rates for that card. Useful when a card offers a fixed or worse-than-live rate for a specific currency.")
-            HelpItem("Selecting a card", "When cards exist, a chip row appears above the rate label on the Currency tab. Tap a chip to apply that card's fees and rates, or tap 'No card fee' to use live rates only.")
+            HelpItem("Per-card rates", "Open the card editor and use the Custom exchange rates section to set rates for specific currencies. Useful when a card offers a fixed or non-live rate.")
+            HelpItem("Rate order", "When a card is active, the rate used is: card-specific rate → global custom rate (if 'Use global custom rates' is enabled on the card) → live rate.")
+            HelpItem("Selecting a card", "When cards exist, a chip row appears above the rate label on the Currency tab. Tap a chip to apply that card's fees and rates, or tap 'No card fee' to use the main calculator rates.")
         }
 
         HelpSection("Custom Exchange Rates") {
             HelpItem("Global overrides", "Settings → Exchange Rates → Add rate. Enter a base currency, target currency, and your rate. The ★ symbol appears whenever a custom rate is in use.")
             HelpItem("Format", "Rates are entered as '1 base = X target', e.g. 1 USD = 0.85 GBP. The live rate is pre-filled as a starting point.")
-            HelpItem("Priority", "Card-specific rates take priority over global custom rates, which take priority over live rates.")
+            HelpItem("Rate order (no card)", "Card-specific rate → global custom rate → live rate.")
+            HelpItem("Cards & global rates", "By default, cards ignore global custom rates and only use their own rates or the live rate. Enable 'Use global custom rates as fallback' in the card editor to change this.")
         }
 
         HelpSection("Tip Calculator") {

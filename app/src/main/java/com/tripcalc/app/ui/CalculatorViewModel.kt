@@ -119,7 +119,8 @@ data class CardProfile(
     val markupPercent: Double,
     val minFeeAmount: Double = 0.0,
     val minFeeCurrency: String = "",
-    val customRates: Map<String, CustomRateEntry> = emptyMap()
+    val customRates: Map<String, CustomRateEntry> = emptyMap(),
+    val useGlobalRates: Boolean = false
 )
 
 data class CustomRateEntry(val base: String, val rate: Double)
@@ -225,8 +226,8 @@ sealed class CalculatorAction {
     data class SetSwapZeroDot(val enabled: Boolean) : CalculatorAction()
     data class SetEnabledModes(val modes: Set<ConversionMode>) : CalculatorAction()
     data class SetDefaultTipPercent(val percent: Double) : CalculatorAction()
-    data class AddCardProfile(val name: String, val markupPercent: Double, val minFeeAmount: Double, val minFeeCurrency: String) : CalculatorAction()
-    data class UpdateCardProfile(val id: String, val name: String, val markupPercent: Double, val minFeeAmount: Double, val minFeeCurrency: String) : CalculatorAction()
+    data class AddCardProfile(val name: String, val markupPercent: Double, val minFeeAmount: Double, val minFeeCurrency: String, val useGlobalRates: Boolean) : CalculatorAction()
+    data class UpdateCardProfile(val id: String, val name: String, val markupPercent: Double, val minFeeAmount: Double, val minFeeCurrency: String, val useGlobalRates: Boolean) : CalculatorAction()
     data class DeleteCardProfile(val id: String) : CalculatorAction()
     data class SetActiveCard(val id: String?) : CalculatorAction()
     data class SetCardCustomRate(val cardId: String, val target: String, val base: String, val rate: Double) : CalculatorAction()
@@ -494,7 +495,7 @@ class CalculatorViewModel(application: Application) : AndroidViewModel(applicati
                 updateDisplay(); return
             }
             is CalculatorAction.AddCardProfile -> {
-                val profile = CardProfile(UUID.randomUUID().toString(), action.name, action.markupPercent, action.minFeeAmount, action.minFeeCurrency)
+                val profile = CardProfile(UUID.randomUUID().toString(), action.name, action.markupPercent, action.minFeeAmount, action.minFeeCurrency, useGlobalRates = action.useGlobalRates)
                 val updated = _uiState.value.cardProfiles + profile
                 _uiState.update { it.copy(cardProfiles = updated) }
                 viewModelScope.launch { repository.saveCardProfiles(updated) }
@@ -502,7 +503,7 @@ class CalculatorViewModel(application: Application) : AndroidViewModel(applicati
             }
             is CalculatorAction.UpdateCardProfile -> {
                 val updated = _uiState.value.cardProfiles.map {
-                    if (it.id == action.id) it.copy(name = action.name, markupPercent = action.markupPercent, minFeeAmount = action.minFeeAmount, minFeeCurrency = action.minFeeCurrency) else it
+                    if (it.id == action.id) it.copy(name = action.name, markupPercent = action.markupPercent, minFeeAmount = action.minFeeAmount, minFeeCurrency = action.minFeeCurrency, useGlobalRates = action.useGlobalRates) else it
                 }
                 _uiState.update { it.copy(cardProfiles = updated) }
                 viewModelScope.launch { repository.saveCardProfiles(updated) }
@@ -844,20 +845,21 @@ class CalculatorViewModel(application: Application) : AndroidViewModel(applicati
     }
 
     // Returns the effective "1 USD = X [code]" rate, preferring custom pair entries over live rates.
-    // Custom entry "1 base = rate target" → effectiveUsdRate(target) = liveUsdRate(base) * rate
-    // Card rates take priority over global custom rates, which take priority over live rates
-    private fun effectiveUsdRate(code: String, state: CalculatorUiState, cardRates: Map<String, CustomRateEntry>? = null): Double? {
+    // Card rates take priority. Global custom rates are only used when no card is active,
+    // or when the card has useGlobalRates = true.
+    private fun effectiveUsdRate(code: String, state: CalculatorUiState, cardRates: Map<String, CustomRateEntry>? = null, useGlobalRates: Boolean = true): Double? {
         cardRates?.get(code)?.let { entry ->
             val baseRate = rates[entry.base] ?: return null
             return baseRate * entry.rate
         }
-        val entry = state.customRates[code]
-        return if (entry != null) {
-            val baseRate = rates[entry.base] ?: return null
-            baseRate * entry.rate
-        } else {
-            rates[code]
+        if (useGlobalRates) {
+            val entry = state.customRates[code]
+            if (entry != null) {
+                val baseRate = rates[entry.base] ?: return null
+                return baseRate * entry.rate
+            }
         }
+        return rates[code]
     }
 
     private fun updateCurrencyDisplay() {
@@ -865,8 +867,9 @@ class CalculatorViewModel(application: Application) : AndroidViewModel(applicati
         val state = _uiState.value
         val activeCard = state.cardProfiles.find { it.id == state.activeCardId }
         val cardRates = activeCard?.customRates?.takeIf { it.isNotEmpty() }
-        val fromRate = effectiveUsdRate(state.fromCurrency, state, cardRates)
-        val toRate = effectiveUsdRate(state.toCurrency, state, cardRates)
+        val useGlobalRates = activeCard == null || activeCard.useGlobalRates
+        val fromRate = effectiveUsdRate(state.fromCurrency, state, cardRates, useGlobalRates)
+        val toRate = effectiveUsdRate(state.toCurrency, state, cardRates, useGlobalRates)
 
         if (fromRate != null && toRate != null && fromRate != 0.0) {
             val baseToValue = value * toRate / fromRate
