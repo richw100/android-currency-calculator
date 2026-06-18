@@ -1,0 +1,253 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>TripCalc — The Calculator Built for Travel</title>
+  <style>
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+      background: #f2f2f7;
+      color: #1c1c1e;
+      line-height: 1.6;
+    }
+
+    /* Hero */
+    .hero {
+      background: linear-gradient(160deg, #1c1c2e 0%, #2c2c3e 100%);
+      color: #fff;
+      text-align: center;
+      padding: 72px 24px 64px;
+    }
+    .hero img {
+      width: 120px;
+      height: 120px;
+      border-radius: 26px;
+      box-shadow: 0 12px 40px rgba(0,0,0,0.4);
+      margin-bottom: 28px;
+    }
+    .hero h1 {
+      font-size: 40px;
+      font-weight: 700;
+      letter-spacing: -0.5px;
+      margin-bottom: 12px;
+    }
+    .hero .tagline {
+      font-size: 19px;
+      color: #aeaeb2;
+      max-width: 480px;
+      margin: 0 auto 32px;
+    }
+    .badges {
+      display: flex;
+      justify-content: center;
+      gap: 12px;
+      flex-wrap: wrap;
+      margin-bottom: 36px;
+    }
+    .badge {
+      background: rgba(255,255,255,0.1);
+      border: 1px solid rgba(255,255,255,0.15);
+      border-radius: 20px;
+      padding: 6px 16px;
+      font-size: 13px;
+      color: #e0e0e6;
+    }
+    .play-btn {
+      display: inline-flex;
+      align-items: center;
+      gap: 10px;
+      background: #34c759;
+      color: #fff;
+      text-decoration: none;
+      font-size: 16px;
+      font-weight: 600;
+      padding: 14px 28px;
+      border-radius: 14px;
+      transition: background 0.2s;
+    }
+    .play-btn:hover { background: #2db34a; }
+    .play-btn svg { flex-shrink: 0; }
+
+    /* Content */
+    .content {
+      max-width: 760px;
+      margin: 0 auto;
+      padding: 48px 24px 80px;
+    }
+
+    .section-title {
+      font-size: 13px;
+      font-weight: 600;
+      letter-spacing: 0.8px;
+      text-transform: uppercase;
+      color: #8e8e93;
+      margin-bottom: 16px;
+    }
+
+    .feature-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fill, minmax(220px, 1fr));
+      gap: 16px;
+      margin-bottom: 48px;
+    }
+    .feature-card {
+      background: #fff;
+      border-radius: 16px;
+      padding: 20px;
+      box-shadow: 0 1px 4px rgba(0,0,0,0.06);
+    }
+    .feature-card .icon {
+      font-size: 28px;
+      margin-bottom: 10px;
+    }
+    .feature-card h3 {
+      font-size: 16px;
+      font-weight: 600;
+      margin-bottom: 6px;
+    }
+    .feature-card p {
+      font-size: 14px;
+      color: #3a3a3c;
+    }
+
+    /* Detail sections */
+    .detail-block {
+      background: #fff;
+      border-radius: 16px;
+      padding: 24px 28px;
+      margin-bottom: 16px;
+      box-shadow: 0 1px 4px rgba(0,0,0,0.06);
+    }
+    .detail-block h2 {
+      font-size: 18px;
+      font-weight: 600;
+      margin-bottom: 10px;
+    }
+    .detail-block p {
+      font-size: 15px;
+      color: #3a3a3c;
+    }
+    .detail-block ul {
+      list-style: none;
+      margin-top: 10px;
+    }
+    .detail-block ul li {
+      font-size: 14px;
+      color: #3a3a3c;
+      padding: 3px 0;
+    }
+    .detail-block ul li::before {
+      content: "•";
+      color: #007aff;
+      font-weight: bold;
+      margin-right: 8px;
+    }
+
+    /* Privacy footer */
+    footer {
+      text-align: center;
+      padding: 24px;
+      font-size: 13px;
+      color: #8e8e93;
+      border-top: 1px solid #d1d1d6;
+    }
+    footer a { color: #007aff; text-decoration: none; }
+    footer a:hover { text-decoration: underline; }
+  </style>
+</head>
+<body>
+
+  <section class="hero">
+    <img src="icon-512.png" alt="TripCalc icon" />
+    <h1>TripCalc</h1>
+    <p class="tagline">The calculator built for travel. Currency conversion, card fees, tips, units, and more — all in one place.</p>
+    <div class="badges">
+      <span class="badge">No ads</span>
+      <span class="badge">No account</span>
+      <span class="badge">No tracking</span>
+      <span class="badge">Works offline</span>
+    </div>
+    <a class="play-btn" href="https://play.google.com/store/apps/details?id=com.tripcalc.app" target="_blank">
+      <svg width="20" height="20" viewBox="0 0 24 24" fill="white"><path d="M3.18 23.5c.3.17.64.22.97.14l11.5-11.5L12.18 8.7 3.18 23.5zM20.82 9.98l-3.18-1.83-3.3 3.29 3.3 3.3 3.2-1.84c.91-.52.91-1.4-.02-1.92zM2.01 1.47C1.98 1.63 2 1.8 2 2v20c0 .2.02.37.05.53l10.1-10.08L2.01 1.47zM15.64 4.5l-11.5-6.64c-.32-.18-.65-.22-.97-.14l9.97 9.97 2.5-3.19z"/></svg>
+      Get it on Google Play
+    </a>
+  </section>
+
+  <div class="content">
+
+    <p class="section-title">What's inside</p>
+    <div class="feature-grid">
+      <div class="feature-card">
+        <div class="icon">💱</div>
+        <h3>Currency Conversion</h3>
+        <p>Live rates for 161 currencies, refreshed every 24 hours. Works offline using cached rates.</p>
+      </div>
+      <div class="feature-card">
+        <div class="icon">💳</div>
+        <h3>Card Fee Profiles</h3>
+        <p>Create profiles for each card with its foreign transaction fee and minimum charge. See the true cost before you pay.</p>
+      </div>
+      <div class="feature-card">
+        <div class="icon">🧾</div>
+        <h3>Tip &amp; Bill Splitting</h3>
+        <p>Calculate tips, split bills any number of ways, and hand off the total straight to the currency converter.</p>
+      </div>
+      <div class="feature-card">
+        <div class="icon">📏</div>
+        <h3>Unit Conversions</h3>
+        <p>Miles, km, inches, cm, feet, metres, square feet, square metres, °C, °F, MPG, and L/100km.</p>
+      </div>
+      <div class="feature-card">
+        <div class="icon">👟</div>
+        <h3>Clothing &amp; Shoe Sizes</h3>
+        <p>Convert between UK, EU, US and international sizing for men's and women's clothing and shoes.</p>
+      </div>
+      <div class="feature-card">
+        <div class="icon">🧮</div>
+        <h3>Full Calculator</h3>
+        <p>Standard operations, brackets, percentage key, and a scrollable history with optional notes.</p>
+      </div>
+    </div>
+
+    <p class="section-title">Details</p>
+
+    <div class="detail-block">
+      <h2>Currency &amp; Card Fees</h2>
+      <p>Rates are fetched from open.er-api.com — 161 currencies, no API key required. Set a custom rate if you've locked one in with your bank or travel money provider.</p>
+      <p style="margin-top:10px;">Card profiles support a fee percentage, a minimum fee, and per-card rate overrides — so you always see exactly what a transaction will cost you.</p>
+    </div>
+
+    <div class="detail-block">
+      <h2>Unit Conversions at a Glance</h2>
+      <ul>
+        <li>Miles ↔ Kilometres</li>
+        <li>Inches ↔ Centimetres</li>
+        <li>Feet ↔ Metres</li>
+        <li>Square feet ↔ Square metres</li>
+        <li>Celsius ↔ Fahrenheit</li>
+        <li>MPG (UK or US) ↔ Litres per 100 km</li>
+      </ul>
+    </div>
+
+    <div class="detail-block">
+      <h2>Customisable &amp; Private</h2>
+      <ul>
+        <li>Five accent colour schemes</li>
+        <li>Dark mode, light mode, or follow system</li>
+        <li>Optional haptic feedback</li>
+        <li>Copy or share any calculated amount</li>
+        <li>No ads, no account, no tracking — ever</li>
+      </ul>
+    </div>
+
+  </div>
+
+  <footer>
+    <p>TripCalc &nbsp;·&nbsp; <a href="privacy-policy.html">Privacy Policy</a></p>
+  </footer>
+
+</body>
+</html>

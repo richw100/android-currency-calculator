@@ -1,0 +1,53 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="512" height="512" viewBox="0 0 108 108">
+
+  <!-- Background: teal rounded square -->
+  <rect width="108" height="108" rx="22" fill="#00BCD4"/>
+
+  <!-- Calculator body: white rounded rectangle -->
+  <path fill="#FFFFFF"
+    d="M37,18 H71 Q80,18 80,27 V79 Q80,88 71,88 H37 Q28,88 28,79 V27 Q28,18 37,18 Z"/>
+
+  <!-- Display: dark teal screen -->
+  <path fill="#00695C"
+    d="M36,25 H72 Q74,25 74,27 V41 Q74,43 72,43 H36 Q34,43 34,41 V27 Q34,25 36,25 Z"/>
+
+  <!-- £ symbol: curve + stem -->
+  <path fill="none" stroke="#FFFFFF" stroke-width="2" stroke-linecap="round"
+    d="M47,29 C47,26 37,26 37,31 L37,41"/>
+  <!-- £ symbol: crossbar -->
+  <path fill="none" stroke="#FFFFFF" stroke-width="2" stroke-linecap="round"
+    d="M34,35 L46,35"/>
+  <!-- £ symbol: base -->
+  <path fill="none" stroke="#FFFFFF" stroke-width="2" stroke-linecap="round"
+    d="M34,41 L48,41"/>
+
+  <!-- → arrow -->
+  <path fill="#FFFFFF" d="M51,32 L57,34 L51,36 Z"/>
+
+  <!-- € symbol: C arc -->
+  <path fill="none" stroke="#FFFFFF" stroke-width="2" stroke-linecap="round"
+    d="M71,29 C71,26 61,26 61,34 C61,42 71,42 71,39"/>
+  <!-- € symbol: top bar -->
+  <path fill="none" stroke="#FFFFFF" stroke-width="2" stroke-linecap="round"
+    d="M62,31 L69,31"/>
+  <!-- € symbol: middle bar -->
+  <path fill="none" stroke="#FFFFFF" stroke-width="2" stroke-linecap="round"
+    d="M62,37 L69,37"/>
+
+  <!-- Digit buttons: cols 1 and 2, light cyan -->
+  <circle cx="38" cy="52" r="3.5" fill="#80DEEA"/>
+  <circle cx="54" cy="52" r="3.5" fill="#80DEEA"/>
+  <circle cx="38" cy="63" r="3.5" fill="#80DEEA"/>
+  <circle cx="54" cy="63" r="3.5" fill="#80DEEA"/>
+  <circle cx="38" cy="74" r="3.5" fill="#80DEEA"/>
+  <circle cx="54" cy="74" r="3.5" fill="#80DEEA"/>
+  <circle cx="38" cy="83" r="3.5" fill="#80DEEA"/>
+  <circle cx="54" cy="83" r="3.5" fill="#80DEEA"/>
+
+  <!-- Operator buttons: col 3, orange -->
+  <circle cx="70" cy="52" r="3.5" fill="#FF9F0A"/>
+  <circle cx="70" cy="63" r="3.5" fill="#FF9F0A"/>
+  <circle cx="70" cy="74" r="3.5" fill="#FF9F0A"/>
+  <circle cx="70" cy="83" r="3.5" fill="#FF9F0A"/>
+
+</svg>
