@@ -226,8 +226,8 @@ sealed class CalculatorAction {
     data class SetSwapZeroDot(val enabled: Boolean) : CalculatorAction()
     data class SetEnabledModes(val modes: Set<ConversionMode>) : CalculatorAction()
     data class SetDefaultTipPercent(val percent: Double) : CalculatorAction()
-    data class AddCardProfile(val name: String, val markupPercent: Double, val minFeeAmount: Double, val minFeeCurrency: String, val useGlobalRates: Boolean) : CalculatorAction()
-    data class UpdateCardProfile(val id: String, val name: String, val markupPercent: Double, val minFeeAmount: Double, val minFeeCurrency: String, val useGlobalRates: Boolean) : CalculatorAction()
+    data class AddCardProfile(val name: String, val markupPercent: Double, val minFeeAmount: Double, val minFeeCurrency: String, val useGlobalRates: Boolean, val customRates: Map<String, CustomRateEntry> = emptyMap()) : CalculatorAction()
+    data class UpdateCardProfile(val id: String, val name: String, val markupPercent: Double, val minFeeAmount: Double, val minFeeCurrency: String, val useGlobalRates: Boolean, val customRates: Map<String, CustomRateEntry>) : CalculatorAction()
     data class DeleteCardProfile(val id: String) : CalculatorAction()
     data class SetActiveCard(val id: String?) : CalculatorAction()
     data class SetCardCustomRate(val cardId: String, val target: String, val base: String, val rate: Double) : CalculatorAction()
@@ -495,7 +495,7 @@ class CalculatorViewModel(application: Application) : AndroidViewModel(applicati
                 updateDisplay(); return
             }
             is CalculatorAction.AddCardProfile -> {
-                val profile = CardProfile(UUID.randomUUID().toString(), action.name, action.markupPercent, action.minFeeAmount, action.minFeeCurrency, useGlobalRates = action.useGlobalRates)
+                val profile = CardProfile(UUID.randomUUID().toString(), action.name, action.markupPercent, action.minFeeAmount, action.minFeeCurrency, customRates = action.customRates, useGlobalRates = action.useGlobalRates)
                 val updated = _uiState.value.cardProfiles + profile
                 _uiState.update { it.copy(cardProfiles = updated) }
                 viewModelScope.launch { repository.saveCardProfiles(updated) }
@@ -503,7 +503,7 @@ class CalculatorViewModel(application: Application) : AndroidViewModel(applicati
             }
             is CalculatorAction.UpdateCardProfile -> {
                 val updated = _uiState.value.cardProfiles.map {
-                    if (it.id == action.id) it.copy(name = action.name, markupPercent = action.markupPercent, minFeeAmount = action.minFeeAmount, minFeeCurrency = action.minFeeCurrency, useGlobalRates = action.useGlobalRates) else it
+                    if (it.id == action.id) it.copy(name = action.name, markupPercent = action.markupPercent, minFeeAmount = action.minFeeAmount, minFeeCurrency = action.minFeeCurrency, useGlobalRates = action.useGlobalRates, customRates = action.customRates) else it
                 }
                 _uiState.update { it.copy(cardProfiles = updated) }
                 viewModelScope.launch { repository.saveCardProfiles(updated) }
@@ -726,7 +726,7 @@ class CalculatorViewModel(application: Application) : AndroidViewModel(applicati
 
         expressionDisplay.append("$currentInput)")
 
-        val (outerFirst, outerOp) = bracketStack.removeLast()
+        val (outerFirst, outerOp) = bracketStack.removeAt(bracketStack.lastIndex)
         firstOperand = outerFirst
         pendingOp = outerOp
 
