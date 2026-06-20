@@ -22,6 +22,8 @@ enum class ConversionMode(val tabLabel: String, val settingsLabel: String) {
     FUEL("⛽ mpg",       "Fuel economy")
 }
 
+enum class FuelMode { MPG, KWH }
+
 enum class DistancePair(
     val fromLabel: String, val fromAbbr: String,
     val toLabel: String,   val toAbbr: String,
@@ -174,6 +176,7 @@ data class CalculatorUiState(
     val tipPeopleCount: Int = 1,
     val fuelInputIsMpg: Boolean = true,
     val fuelUseUkGallons: Boolean = true,
+    val fuelMode: FuelMode = FuelMode.MPG,
     val swapZeroDot: Boolean = true,
     val enabledModes: Set<ConversionMode> = ConversionMode.entries.toSet(),
     val cardProfiles: List<CardProfile> = emptyList(),
@@ -223,6 +226,7 @@ sealed class CalculatorAction {
     data class SetCustomTipPercent(val percent: Double) : CalculatorAction()
     object SwapFuelDirection : CalculatorAction()
     data class SetFuelUseUkGallons(val useUk: Boolean) : CalculatorAction()
+    data class SetFuelMode(val mode: FuelMode) : CalculatorAction()
     data class SetSwapZeroDot(val enabled: Boolean) : CalculatorAction()
     data class SetEnabledModes(val modes: Set<ConversionMode>) : CalculatorAction()
     data class SetDefaultTipPercent(val percent: Double) : CalculatorAction()
@@ -474,6 +478,10 @@ class CalculatorViewModel(application: Application) : AndroidViewModel(applicati
             is CalculatorAction.SetFuelUseUkGallons -> {
                 _uiState.update { it.copy(fuelUseUkGallons = action.useUk) }
                 viewModelScope.launch { repository.saveFuelUseUkGallons(action.useUk) }
+                updateDisplay(); return
+            }
+            is CalculatorAction.SetFuelMode -> {
+                _uiState.update { it.copy(fuelMode = action.mode, fuelInputIsMpg = true) }
                 updateDisplay(); return
             }
             is CalculatorAction.SetSwapZeroDot -> {
@@ -787,14 +795,22 @@ class CalculatorViewModel(application: Application) : AndroidViewModel(applicati
                 ConversionMode.DISTANCE -> distFrom
                 ConversionMode.TEMPERATURE -> state.tempUnit.abbr
                 ConversionMode.TIP -> "$pctLabel%"
-                ConversionMode.FUEL -> if (state.fuelInputIsMpg) (if (state.fuelUseUkGallons) "mpg (UK)" else "mpg (US)") else "L/100km"
+                ConversionMode.FUEL -> if (state.fuelMode == FuelMode.KWH) {
+                    if (state.fuelInputIsMpg) "mi/kWh" else "kWh/100km"
+                } else {
+                    if (state.fuelInputIsMpg) (if (state.fuelUseUkGallons) "mpg (UK)" else "mpg (US)") else "L/100km"
+                }
                 ConversionMode.CURRENCY -> state.fromCurrency
             },
             toCurrency = when (state.conversionMode) {
                 ConversionMode.DISTANCE -> distTo
                 ConversionMode.TEMPERATURE -> toTempUnit.abbr
                 ConversionMode.TIP -> "${state.tipPeopleCount}p"
-                ConversionMode.FUEL -> if (state.fuelInputIsMpg) "L/100km" else (if (state.fuelUseUkGallons) "mpg (UK)" else "mpg (US)")
+                ConversionMode.FUEL -> if (state.fuelMode == FuelMode.KWH) {
+                    if (state.fuelInputIsMpg) "kWh/100km" else "mi/kWh"
+                } else {
+                    if (state.fuelInputIsMpg) "L/100km" else (if (state.fuelUseUkGallons) "mpg (UK)" else "mpg (US)")
+                }
                 ConversionMode.CURRENCY -> state.toCurrency
             },
             timestamp = System.currentTimeMillis(),
@@ -986,20 +1002,37 @@ class CalculatorViewModel(application: Application) : AndroidViewModel(applicati
     private fun updateFuelDisplay() {
         val value = currentInput.toDoubleOrNull() ?: 0.0
         val state = _uiState.value
-        val factor = if (state.fuelUseUkGallons) 282.481 else 235.214
-        val mpgLabel = if (state.fuelUseUkGallons) "mpg (UK)" else "mpg (US)"
-        val (fromAbbr, toAbbr) = if (state.fuelInputIsMpg)
-            Pair(mpgLabel, "L/100km") else Pair("L/100km", mpgLabel)
-        val converted = if (value > 0) factor / value else 0.0
-        val rateLabel = if (state.fuelInputIsMpg)
-            "${factor.toInt()} ÷ mpg = L/100km" else "${factor.toInt()} ÷ L/100km = $mpgLabel"
-        _uiState.update {
-            it.copy(
-                fromAmount = "$fromAbbr ${"%.2f".format(value)}",
-                toAmount = "$toAbbr ${"%.2f".format(converted)}",
-                exchangeRateLabel = rateLabel,
-                customRatePctDiff = null
-            )
+        if (state.fuelMode == FuelMode.KWH) {
+            val kwhFactor = 62.1371  // 100 / 1.60934
+            val (fromAbbr, toAbbr) = if (state.fuelInputIsMpg)
+                Pair("mi/kWh", "kWh/100km") else Pair("kWh/100km", "mi/kWh")
+            val converted = if (value > 0) kwhFactor / value else 0.0
+            val rateLabel = if (state.fuelInputIsMpg)
+                "62.14 ÷ mi/kWh = kWh/100km" else "62.14 ÷ kWh/100km = mi/kWh"
+            _uiState.update {
+                it.copy(
+                    fromAmount = "$fromAbbr ${"%.2f".format(value)}",
+                    toAmount = "$toAbbr ${"%.2f".format(converted)}",
+                    exchangeRateLabel = rateLabel,
+                    customRatePctDiff = null
+                )
+            }
+        } else {
+            val factor = if (state.fuelUseUkGallons) 282.481 else 235.214
+            val mpgLabel = if (state.fuelUseUkGallons) "mpg (UK)" else "mpg (US)"
+            val (fromAbbr, toAbbr) = if (state.fuelInputIsMpg)
+                Pair(mpgLabel, "L/100km") else Pair("L/100km", mpgLabel)
+            val converted = if (value > 0) factor / value else 0.0
+            val rateLabel = if (state.fuelInputIsMpg)
+                "${factor.toInt()} ÷ mpg = L/100km" else "${factor.toInt()} ÷ L/100km = $mpgLabel"
+            _uiState.update {
+                it.copy(
+                    fromAmount = "$fromAbbr ${"%.2f".format(value)}",
+                    toAmount = "$toAbbr ${"%.2f".format(converted)}",
+                    exchangeRateLabel = rateLabel,
+                    customRatePctDiff = null
+                )
+            }
         }
     }
 }

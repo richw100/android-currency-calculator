@@ -557,8 +557,10 @@ fun CalculatorScreen(vm: CalculatorViewModel = viewModel(), modifier: Modifier =
         ConversionMode.FUEL -> FuelConversionRow(
             inputIsMpg = state.fuelInputIsMpg,
             useUkGallons = state.fuelUseUkGallons,
+            fuelMode = state.fuelMode,
             rateLabel = state.exchangeRateLabel,
-            onSwap = { vm.onAction(CalculatorAction.SwapFuelDirection) }
+            onSwap = { vm.onAction(CalculatorAction.SwapFuelDirection) },
+            onSetFuelMode = { vm.onAction(CalculatorAction.SetFuelMode(it)) }
         )
         }
 
@@ -1094,11 +1096,22 @@ private fun TipBreakdownDisplay(bill: Double, tipPercent: Double, people: Int, o
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
-private fun FuelConversionRow(inputIsMpg: Boolean, useUkGallons: Boolean, rateLabel: String, onSwap: () -> Unit) {
+private fun FuelConversionRow(
+    inputIsMpg: Boolean,
+    useUkGallons: Boolean,
+    fuelMode: FuelMode,
+    rateLabel: String,
+    onSwap: () -> Unit,
+    onSetFuelMode: (FuelMode) -> Unit
+) {
     val colors = LocalAppColors.current
-    val mpgLabel = if (useUkGallons) "mpg (UK)" else "mpg (US)"
-    val fromLabel = if (inputIsMpg) mpgLabel else "L/100km"
-    val toLabel   = if (inputIsMpg) "L/100km" else mpgLabel
+    val (fromLabel, toLabel) = when (fuelMode) {
+        FuelMode.KWH -> if (inputIsMpg) Pair("mi/kWh", "kWh/100km") else Pair("kWh/100km", "mi/kWh")
+        FuelMode.MPG -> {
+            val mpgLabel = if (useUkGallons) "mpg (UK)" else "mpg (US)"
+            if (inputIsMpg) Pair(mpgLabel, "L/100km") else Pair("L/100km", mpgLabel)
+        }
+    }
     val tooltipState = rememberTooltipState()
     val scope = rememberCoroutineScope()
     Column(modifier = Modifier.fillMaxWidth()) {
@@ -1107,13 +1120,15 @@ private fun FuelConversionRow(inputIsMpg: Boolean, useUkGallons: Boolean, rateLa
             horizontalArrangement = Arrangement.spacedBy(8.dp),
             verticalAlignment = Alignment.CenterVertically
         ) {
-            TooltipBox(
-                positionProvider = TooltipDefaults.rememberPlainTooltipPositionProvider(),
-                tooltip = { PlainTooltip { Text("Change UK or US gallons in Settings") } },
-                state = tooltipState
-            ) {
-                IconButton(onClick = { scope.launch { tooltipState.show() } }) {
-                    Icon(Icons.Default.Info, contentDescription = "Gallons info", tint = colors.textMuted, modifier = Modifier.size(18.dp))
+            if (fuelMode == FuelMode.MPG) {
+                TooltipBox(
+                    positionProvider = TooltipDefaults.rememberPlainTooltipPositionProvider(),
+                    tooltip = { PlainTooltip { Text("Change UK or US gallons in Settings") } },
+                    state = tooltipState
+                ) {
+                    IconButton(onClick = { scope.launch { tooltipState.show() } }) {
+                        Icon(Icons.Default.Info, contentDescription = "Gallons info", tint = colors.textMuted, modifier = Modifier.size(18.dp))
+                    }
                 }
             }
             androidx.compose.foundation.layout.Box(
@@ -1126,8 +1141,29 @@ private fun FuelConversionRow(inputIsMpg: Boolean, useUkGallons: Boolean, rateLa
                 modifier = Modifier.weight(1f).border(1.dp, colors.inputBorder, RoundedCornerShape(8.dp)).padding(horizontal = 12.dp, vertical = 10.dp)
             ) { Text("To: $toLabel", color = colors.textPrimary, fontSize = 13.sp, maxLines = 1) }
         }
-        if (rateLabel.isNotEmpty()) {
-            Text(rateLabel, color = colors.textSecondary, fontSize = 11.sp, modifier = Modifier.padding(horizontal = 16.dp, vertical = 2.dp))
+        Row(
+            modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 2.dp),
+            horizontalArrangement = Arrangement.spacedBy(8.dp),
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            FuelMode.entries.forEach { mode ->
+                val label = if (mode == FuelMode.MPG) "mpg / L" else "mi/kWh"
+                val selected = fuelMode == mode
+                FilterChip(
+                    selected = selected,
+                    onClick = { onSetFuelMode(mode) },
+                    label = { Text(label, fontSize = 11.sp) },
+                    colors = FilterChipDefaults.filterChipColors(
+                        selectedContainerColor = colors.operator,
+                        selectedLabelColor = colors.operatorContent,
+                        containerColor = colors.surface,
+                        labelColor = colors.textSecondary
+                    )
+                )
+            }
+            if (rateLabel.isNotEmpty()) {
+                Text(rateLabel, color = colors.textSecondary, fontSize = 11.sp, modifier = Modifier.weight(1f), maxLines = 1)
+            }
         }
     }
 }
@@ -1664,8 +1700,10 @@ fun HelpScreen(modifier: Modifier = Modifier) {
         }
 
         HelpSection("Fuel Calculator") {
-            HelpItem("Cost per distance", "Enter your car's fuel consumption to convert between mpg and L/100km.")
-            HelpItem("UK vs US gallons", "Toggle between UK imperial gallons and US gallons in Settings → Fuel.")
+            HelpItem("Mode", "Use the mpg / L chip for petrol and diesel cars, or mi/kWh for electric vehicles.")
+            HelpItem("mpg / L", "Converts between miles per gallon and litres per 100 km. Tap ⇄ to flip direction.")
+            HelpItem("mi/kWh", "Converts between miles per kWh and kWh per 100 km — the two most common EV efficiency units.")
+            HelpItem("UK vs US gallons", "Toggle between UK imperial gallons and US gallons in Settings → Fuel (mpg mode only).")
         }
 
         HelpSection("Distance Converter") {
