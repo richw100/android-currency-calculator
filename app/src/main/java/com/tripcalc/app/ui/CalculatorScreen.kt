@@ -17,6 +17,7 @@ import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.automirrored.filled.HelpOutline
 import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.History
 import androidx.compose.material.icons.filled.HelpOutline
@@ -175,7 +176,7 @@ fun AppScreen() {
                                 )
                                 DropdownMenuItem(
                                     text = { Text("Help") },
-                                    leadingIcon = { Icon(Icons.Default.HelpOutline, null) },
+                                    leadingIcon = { Icon(Icons.AutoMirrored.Filled.HelpOutline, null) },
                                     onClick = { screen = Screen.Help; menuExpanded = false }
                                 )
                                 DropdownMenuItem(
