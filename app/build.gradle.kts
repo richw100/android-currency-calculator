@@ -69,5 +69,6 @@ dependencies {
     implementation(libs.datastore.preferences)
     implementation(libs.kotlinx.coroutines.android)
     implementation(libs.gson)
+    implementation(libs.mlkit.text.recognition)
     debugImplementation(libs.androidx.compose.ui.tooling)
 }

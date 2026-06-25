@@ -188,7 +188,8 @@ data class CalculatorUiState(
     val womensFromCountry: String = "US",
     val womensToCountry: String = "UK",
     val mensFromCountry: String = "US/UK",
-    val mensToCountry: String = "EU"
+    val mensToCountry: String = "EU",
+    val exchangeRate: Double? = null
 )
 
 sealed class CalculatorAction {
@@ -932,7 +933,8 @@ class CalculatorViewModel(application: Application) : AndroidViewModel(applicati
                     fromAmount = "${state.fromCurrency} ${"%.2f".format(value)}",
                     toAmount = "${state.toCurrency} ${"%.2f".format(toValue)}",
                     exchangeRateLabel = rateLabel,
-                    customRatePctDiff = pctDiff
+                    customRatePctDiff = pctDiff,
+                    exchangeRate = toRate / fromRate
                 )
             }
         } else {
@@ -941,7 +943,8 @@ class CalculatorViewModel(application: Application) : AndroidViewModel(applicati
                     fromAmount = "${state.fromCurrency} —",
                     toAmount = "${state.toCurrency} —",
                     exchangeRateLabel = "",
-                    customRatePctDiff = null
+                    customRatePctDiff = null,
+                    exchangeRate = null
                 )
             }
         }

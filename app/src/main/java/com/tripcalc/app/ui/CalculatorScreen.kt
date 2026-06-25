@@ -1,12 +1,24 @@
 package com.tripcalc.app.ui
 
 import android.content.Intent
+import android.graphics.Bitmap
+import android.graphics.BitmapFactory
+import android.graphics.Matrix
+import android.graphics.Rect as AndroidRect
+import android.media.ExifInterface
 import android.net.Uri
+import android.widget.Toast
+import androidx.activity.compose.BackHandler
+import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.result.contract.ActivityResultContracts
+import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.ExperimentalFoundationApi
+import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.combinedClickable
+import androidx.compose.foundation.gestures.detectTapGestures
 import androidx.compose.foundation.isSystemInDarkTheme
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
@@ -18,9 +30,9 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.HelpOutline
+import androidx.compose.material.icons.filled.CameraAlt
 import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.History
-import androidx.compose.material.icons.filled.HelpOutline
 import androidx.compose.material.icons.filled.Info
 import androidx.compose.material.icons.filled.Menu
 import androidx.compose.material.icons.filled.Refresh
@@ -33,7 +45,15 @@ import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.geometry.CornerRadius
+import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.geometry.Size
+import androidx.compose.ui.graphics.asImageBitmap
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.drawscope.Stroke
+import androidx.compose.ui.input.pointer.pointerInput
+import androidx.compose.ui.layout.ContentScale
+import androidx.compose.ui.unit.IntOffset
 import java.util.Currency as JavaCurrency
 import android.os.Build
 import android.os.VibrationEffect
@@ -51,7 +71,14 @@ import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import androidx.core.content.FileProvider
+import com.google.mlkit.vision.common.InputImage
+import com.google.mlkit.vision.text.TextRecognition
+import com.google.mlkit.vision.text.latin.TextRecognizerOptions
+import java.io.File
 import kotlin.math.abs
+import kotlin.math.min
+import kotlin.math.roundToInt
 import kotlinx.coroutines.launch
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.viewmodel.compose.viewModel
@@ -78,8 +105,33 @@ fun currencyName(code: String) = currencyNameCache.getOrPut(code) {
 
 // ── Root composable ──────────────────────────────────────────────────────────
 
-private enum class Screen { Calculator, History, Settings, About, Converter, Help }
+private enum class Screen { Calculator, History, Settings, About, Converter, Help, OcrOverlay }
 
+private data class DetectedNumber(
+    val rawText: String,
+    val value: Double,
+    val imageBox: AndroidRect,
+    val selected: Boolean = false
+)
+
+private fun loadOrientedBitmap(context: android.content.Context, uri: Uri): Bitmap? {
+    val bitmap = context.contentResolver.openInputStream(uri)
+        ?.use { BitmapFactory.decodeStream(it) } ?: return null
+    val rotation = context.contentResolver.openInputStream(uri)?.use { stream ->
+        val exif = ExifInterface(stream)
+        when (exif.getAttributeInt(ExifInterface.TAG_ORIENTATION, ExifInterface.ORIENTATION_NORMAL)) {
+            ExifInterface.ORIENTATION_ROTATE_90  -> 90f
+            ExifInterface.ORIENTATION_ROTATE_180 -> 180f
+            ExifInterface.ORIENTATION_ROTATE_270 -> 270f
+            else -> 0f
+        }
+    } ?: 0f
+    if (rotation == 0f) return bitmap
+    val m = Matrix().apply { postRotate(rotation) }
+    return Bitmap.createBitmap(bitmap, 0, 0, bitmap.width, bitmap.height, m, true)
+}
+
+@OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun AppScreen() {
     var screen by remember { mutableStateOf(Screen.Calculator) }
@@ -94,6 +146,37 @@ fun AppScreen() {
         DarkModePref.DARK   -> true
     }
     val colors = buildAppColors(effectiveIsDark, state.accentScheme)
+
+    val context = LocalContext.current
+    var ocrBitmap by remember { mutableStateOf<Bitmap?>(null) }
+    var cameraImageUri by remember { mutableStateOf<Uri?>(null) }
+    var showOcrSourceSheet by remember { mutableStateOf(false) }
+
+    val galleryLauncher = rememberLauncherForActivityResult(ActivityResultContracts.GetContent()) { uri ->
+        if (uri != null) {
+            val bmp = loadOrientedBitmap(context, uri)
+            if (bmp != null) { ocrBitmap = bmp; screen = Screen.OcrOverlay }
+        }
+    }
+    val cameraLauncher = rememberLauncherForActivityResult(ActivityResultContracts.TakePicture()) { success ->
+        if (success) {
+            val uri = cameraImageUri
+            if (uri != null) {
+                val bmp = loadOrientedBitmap(context, uri)
+                if (bmp != null) { ocrBitmap = bmp; screen = Screen.OcrOverlay }
+            }
+        }
+    }
+    val cameraPermissionLauncher = rememberLauncherForActivityResult(ActivityResultContracts.RequestPermission()) { granted ->
+        if (granted) {
+            val file = File.createTempFile("ocr_", ".jpg", context.cacheDir)
+            val uri = FileProvider.getUriForFile(context, "${context.packageName}.provider", file)
+            cameraImageUri = uri
+            cameraLauncher.launch(uri)
+        } else {
+            Toast.makeText(context, "Camera permission denied — use gallery instead", Toast.LENGTH_SHORT).show()
+        }
+    }
 
     CalcAppTheme(darkTheme = effectiveIsDark) {
         CompositionLocalProvider(LocalAppColors provides colors) {
@@ -151,6 +234,9 @@ fun AppScreen() {
                     )
                     Spacer(modifier = Modifier.weight(1f))
                     if (screen == Screen.Calculator) {
+                        IconButton(onClick = { showOcrSourceSheet = true }) {
+                            Icon(Icons.Default.CameraAlt, contentDescription = "Scan receipt", tint = colors.textPrimary)
+                        }
                         Box {
                             IconButton(onClick = { menuExpanded = true }) {
                                 Icon(Icons.Default.Menu, contentDescription = "Menu", tint = colors.textPrimary)
@@ -202,6 +288,53 @@ fun AppScreen() {
                     Screen.Settings   -> SettingsScreen(vm = vm, modifier = Modifier.weight(1f))
                     Screen.Converter  -> SizeConverterScreen(vm = vm, modifier = Modifier.weight(1f))
                     Screen.Help       -> HelpScreen(modifier = Modifier.weight(1f))
+                    Screen.OcrOverlay -> {
+                        val bmp = ocrBitmap
+                        if (bmp != null) {
+                            OcrOverlayScreen(
+                                bitmap = bmp,
+                                uiState = state,
+                                modifier = Modifier.weight(1f),
+                                onUseAmount = { amount ->
+                                    vm.onAction(CalculatorAction.PasteValue(amount))
+                                    screen = Screen.Calculator
+                                },
+                                onClose = { screen = Screen.Calculator }
+                            )
+                        } else {
+                            screen = Screen.Calculator
+                        }
+                    }
+                }
+
+                if (showOcrSourceSheet) {
+                    ModalBottomSheet(
+                        onDismissRequest = { showOcrSourceSheet = false },
+                        containerColor = colors.surface
+                    ) {
+                        Column(modifier = Modifier.padding(16.dp).navigationBarsPadding()) {
+                            Text("Scan a receipt or image", fontWeight = FontWeight.SemiBold,
+                                fontSize = 16.sp, color = colors.textPrimary,
+                                modifier = Modifier.padding(bottom = 12.dp))
+                            ListItem(
+                                headlineContent = { Text("Take photo", color = colors.textPrimary) },
+                                leadingContent = { Icon(Icons.Default.CameraAlt, null, tint = colors.textSecondary) },
+                                modifier = Modifier.clickable {
+                                    showOcrSourceSheet = false
+                                    cameraPermissionLauncher.launch("android.permission.CAMERA")
+                                }
+                            )
+                            ListItem(
+                                headlineContent = { Text("Choose from gallery", color = colors.textPrimary) },
+                                leadingContent = { Icon(Icons.Default.History, null, tint = colors.textSecondary) },
+                                modifier = Modifier.clickable {
+                                    showOcrSourceSheet = false
+                                    galleryLauncher.launch("image/*")
+                                }
+                            )
+                            Spacer(Modifier.height(8.dp))
+                        }
+                    }
                 }
             }
         }
@@ -1749,6 +1882,198 @@ private fun HelpSection(title: String, content: @Composable () -> Unit) {
     HorizontalDivider(color = colors.divider, thickness = 1.dp, modifier = Modifier.padding(top = 4.dp, bottom = 8.dp))
     content()
     Spacer(Modifier.height(8.dp))
+}
+
+// ── OCR overlay ──────────────────────────────────────────────────────────────
+
+@Composable
+private fun OcrOverlayScreen(
+    bitmap: Bitmap,
+    uiState: CalculatorUiState,
+    modifier: Modifier = Modifier,
+    onUseAmount: (String) -> Unit,
+    onClose: () -> Unit
+) {
+    val colors = LocalAppColors.current
+    var detections by remember { mutableStateOf<List<DetectedNumber>>(emptyList()) }
+    var isLoading by remember { mutableStateOf(true) }
+    var lastTappedValue by remember { mutableStateOf<String?>(null) }
+
+    BackHandler { onClose() }
+
+    LaunchedEffect(bitmap) {
+        val image = InputImage.fromBitmap(bitmap, 0)
+        TextRecognition.getClient(TextRecognizerOptions.DEFAULT_OPTIONS)
+            .process(image)
+            .addOnSuccessListener { result ->
+                val currencyRe = Regex("[£\$€¥₹₩₪฿₫₦]")
+                val found = mutableListOf<DetectedNumber>()
+                for (block in result.textBlocks) {
+                    for (line in block.lines) {
+                        for (element in line.elements) {
+                            val box = element.boundingBox ?: continue
+                            val clean = element.text.replace(currencyRe, "").replace(",", "").trim()
+                            val value = clean.toDoubleOrNull() ?: continue
+                            if (value <= 0) continue
+                            found.add(DetectedNumber(rawText = element.text, value = value, imageBox = box))
+                        }
+                    }
+                }
+                detections = found
+                isLoading = false
+            }
+            .addOnFailureListener { isLoading = false }
+    }
+
+    val exchangeRate = uiState.exchangeRate
+    val fromCurrency = uiState.fromCurrency
+    val toCurrency = uiState.toCurrency
+    val selectedItems = detections.filter { it.selected }
+    val selectedTotal = selectedItems.sumOf { it.value }
+
+    Column(modifier = modifier.background(Color.Black)) {
+        // Top bar
+        Row(
+            modifier = Modifier.fillMaxWidth().background(Color(0xCC000000)).padding(4.dp),
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            IconButton(onClick = onClose) {
+                Icon(Icons.Default.Close, null, tint = Color.White)
+            }
+            Text("$fromCurrency → $toCurrency", color = Color.White, fontSize = 15.sp,
+                fontWeight = FontWeight.Medium)
+            if (exchangeRate != null) {
+                Text("  (1 = ${"%.4f".format(exchangeRate)})", color = Color.White.copy(0.55f), fontSize = 11.sp)
+            }
+        }
+
+        // Image + overlay
+        Box(modifier = Modifier.weight(1f).fillMaxWidth()) {
+            if (isLoading) {
+                CircularProgressIndicator(modifier = Modifier.align(Alignment.Center), color = Color.White)
+            } else {
+                BoxWithConstraints(modifier = Modifier.fillMaxSize()) {
+                    val containerW = constraints.maxWidth.toFloat()
+                    val containerH = constraints.maxHeight.toFloat()
+                    val imgW = bitmap.width.toFloat()
+                    val imgH = bitmap.height.toFloat()
+                    val scale = min(containerW / imgW, containerH / imgH)
+                    val offsetX = (containerW - imgW * scale) / 2f
+                    val offsetY = (containerH - imgH * scale) / 2f
+
+                    Image(
+                        bitmap = bitmap.asImageBitmap(),
+                        contentDescription = null,
+                        contentScale = ContentScale.Fit,
+                        modifier = Modifier.fillMaxSize()
+                    )
+
+                    // Bounding box outlines
+                    Canvas(modifier = Modifier.fillMaxSize()) {
+                        for (det in detections) {
+                            val r = det.imageBox
+                            drawRoundRect(
+                                color = if (det.selected) Color(0xFFFFD700) else Color.White.copy(0.65f),
+                                topLeft = Offset(r.left * scale + offsetX, r.top * scale + offsetY),
+                                size = Size(r.width() * scale, r.height() * scale),
+                                cornerRadius = CornerRadius(4.dp.toPx()),
+                                style = Stroke(width = if (det.selected) 3.dp.toPx() else 1.5f.dp.toPx())
+                            )
+                        }
+                    }
+
+                    // Converted value bubbles for selected items
+                    if (exchangeRate != null) {
+                        for (det in selectedItems) {
+                            val r = det.imageBox
+                            val bubbleX = (r.left * scale + offsetX).roundToInt()
+                            val bubbleY = (r.bottom * scale + offsetY + 4).roundToInt()
+                            Box(
+                                modifier = Modifier
+                                    .offset { IntOffset(bubbleX, bubbleY) }
+                                    .background(Color(0xDD000000), RoundedCornerShape(4.dp))
+                                    .padding(horizontal = 5.dp, vertical = 2.dp)
+                            ) {
+                                Text(
+                                    "$toCurrency ${"%.2f".format(det.value * exchangeRate)}",
+                                    color = Color(0xFFFFD700),
+                                    fontSize = 11.sp,
+                                    fontWeight = FontWeight.Bold
+                                )
+                            }
+                        }
+                    }
+
+                    // Tap handler
+                    Box(modifier = Modifier.fillMaxSize().pointerInput(detections) {
+                        detectTapGestures { tap ->
+                            val imgX = ((tap.x - offsetX) / scale).toInt()
+                            val imgY = ((tap.y - offsetY) / scale).toInt()
+                            var hitIndex = -1
+                            detections.forEachIndexed { i, det ->
+                                if (hitIndex < 0 && det.imageBox.contains(imgX, imgY)) hitIndex = i
+                            }
+                            if (hitIndex >= 0) {
+                                detections = detections.mapIndexed { i, det ->
+                                    if (i == hitIndex) {
+                                        val newSelected = !det.selected
+                                        if (newSelected) {
+                                            lastTappedValue = if (det.value == kotlin.math.floor(det.value))
+                                                det.value.toLong().toString()
+                                            else "%.2f".format(det.value)
+                                        }
+                                        det.copy(selected = newSelected)
+                                    } else det
+                                }
+                            }
+                        }
+                    })
+
+                    if (!isLoading && detections.isEmpty()) {
+                        Text(
+                            "No numbers detected\nTry a clearer photo",
+                            color = Color.White.copy(0.7f),
+                            textAlign = TextAlign.Center,
+                            modifier = Modifier.align(Alignment.Center).padding(32.dp)
+                        )
+                    }
+                }
+            }
+        }
+
+        // Bottom bar — only shown when items are selected
+        if (selectedItems.isNotEmpty()) {
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .background(Color(0xEE000000))
+                    .padding(horizontal = 16.dp, vertical = 10.dp),
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Column(modifier = Modifier.weight(1f)) {
+                    Text(
+                        "Selected: $fromCurrency ${"%.2f".format(selectedTotal)}",
+                        color = Color.White, fontSize = 12.sp
+                    )
+                    if (exchangeRate != null) {
+                        Text(
+                            "= $toCurrency ${"%.2f".format(selectedTotal * exchangeRate)}",
+                            color = Color(0xFFFFD700), fontSize = 16.sp, fontWeight = FontWeight.Bold
+                        )
+                    }
+                }
+                val useVal = lastTappedValue
+                if (useVal != null) {
+                    Button(
+                        onClick = { onUseAmount(useVal) },
+                        colors = ButtonDefaults.buttonColors(containerColor = colors.equals)
+                    ) {
+                        Text("Use $useVal", color = colors.equalsContent, fontWeight = FontWeight.Bold)
+                    }
+                }
+            }
+        }
+    }
 }
 
 @Composable
