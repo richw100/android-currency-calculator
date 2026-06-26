@@ -19,6 +19,8 @@ import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.combinedClickable
 import androidx.compose.foundation.gestures.detectTapGestures
+import androidx.compose.foundation.gestures.detectTransformGestures
+import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.foundation.isSystemInDarkTheme
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
@@ -61,8 +63,11 @@ import android.os.Vibrator
 import android.os.VibratorManager
 import androidx.compose.ui.platform.LocalClipboardManager
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.text.AnnotatedString
+import androidx.compose.ui.text.PlatformTextStyle
+import androidx.compose.ui.text.TextStyle
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.window.Dialog
@@ -101,6 +106,14 @@ fun currencyFlag(code: String): String {
 private val currencyNameCache = HashMap<String, String>(200)
 fun currencyName(code: String) = currencyNameCache.getOrPut(code) {
     try { JavaCurrency.getInstance(code).displayName } catch (e: Exception) { code }
+}
+
+private val currencySymbolCache = HashMap<String, String>(200)
+fun currencySymbol(code: String) = currencySymbolCache.getOrPut(code) {
+    try {
+        val sym = JavaCurrency.getInstance(code).getSymbol()
+        if (sym != code) sym else code
+    } catch (e: Exception) { code }
 }
 
 // ── Root composable ──────────────────────────────────────────────────────────
@@ -295,7 +308,8 @@ fun AppScreen() {
                                 bitmap = bmp,
                                 uiState = state,
                                 modifier = Modifier.weight(1f),
-                                onUseAmount = { amount ->
+                                onUseAmount = { amount, mode ->
+                                    vm.onAction(CalculatorAction.SetConversionMode(mode))
                                     vm.onAction(CalculatorAction.PasteValue(amount))
                                     screen = Screen.Calculator
                                 },
@@ -1891,13 +1905,16 @@ private fun OcrOverlayScreen(
     bitmap: Bitmap,
     uiState: CalculatorUiState,
     modifier: Modifier = Modifier,
-    onUseAmount: (String) -> Unit,
+    onUseAmount: (String, ConversionMode) -> Unit,
     onClose: () -> Unit
 ) {
     val colors = LocalAppColors.current
     var detections by remember { mutableStateOf<List<DetectedNumber>>(emptyList()) }
     var isLoading by remember { mutableStateOf(true) }
     var lastTappedValue by remember { mutableStateOf<String?>(null) }
+    var pendingValue by remember { mutableStateOf<String?>(null) }
+    var zoom by remember { mutableStateOf(1f) }
+    var panOffset by remember { mutableStateOf(Offset.Zero) }
 
     BackHandler { onClose() }
 
@@ -1907,15 +1924,88 @@ private fun OcrOverlayScreen(
             .process(image)
             .addOnSuccessListener { result ->
                 val currencyRe = Regex("[£\$€¥₹₩₪฿₫₦]")
+                val trailingLetters = Regex("[A-Za-z]+$")
                 val found = mutableListOf<DetectedNumber>()
                 for (block in result.textBlocks) {
                     for (line in block.lines) {
-                        for (element in line.elements) {
-                            val box = element.boundingBox ?: continue
-                            val clean = element.text.replace(currencyRe, "").replace(",", "").trim()
-                            val value = clean.toDoubleOrNull() ?: continue
-                            if (value <= 0) continue
-                            found.add(DetectedNumber(rawText = element.text, value = value, imageBox = box))
+                        var i = 0
+                        while (i < line.elements.size) {
+                            val el = line.elements[i]
+                            val box1 = el.boundingBox
+                            if (box1 == null) { i++; continue }
+                            val text1 = el.text.replace(currencyRe, "").replace(",", "").trim().replace(trailingLetters, "")
+                            var finalText = text1
+                            var finalBox = box1
+                            var skip = 0
+
+                            // Receipt fonts sometimes split "10.35" into separate elements.
+                            // Check the next 1–2 elements on the same line to reconstruct
+                            // split decimals (gap must be ≤ char height to qualify).
+                            if (text1.matches(Regex("\\d+\\.?"))) {
+                                val el2 = line.elements.getOrNull(i + 1)
+                                val box2 = el2?.boundingBox
+                                if (el2 != null && box2 != null &&
+                                    box2.left - box1.right <= box1.height()) {
+                                    val text2 = el2.text.replace(currencyRe, "").replace(",", "").trim().replace(trailingLetters, "")
+                                    when {
+                                        // "10." + "35"  →  "10.35"
+                                        text1.endsWith(".") && text2.matches(Regex("\\d+")) -> {
+                                            val c = "$text1$text2"
+                                            if (c.toDoubleOrNull() != null) {
+                                                finalText = c
+                                                finalBox = AndroidRect(box1.left,
+                                                    minOf(box1.top, box2.top),
+                                                    box2.right, maxOf(box1.bottom, box2.bottom))
+                                                skip = 1
+                                            }
+                                        }
+                                        // "10" + "35"  →  "10.35"
+                                        text2.matches(Regex("\\d+")) -> {
+                                            val c = "$text1.$text2"
+                                            if (c.toDoubleOrNull() != null) {
+                                                finalText = c
+                                                finalBox = AndroidRect(box1.left,
+                                                    minOf(box1.top, box2.top),
+                                                    box2.right, maxOf(box1.bottom, box2.bottom))
+                                                skip = 1
+                                            }
+                                        }
+                                        // "10" + ".35"  →  "10.35"
+                                        text2.startsWith(".") && text2.drop(1).matches(Regex("\\d+")) -> {
+                                            val c = "$text1$text2"
+                                            if (c.toDoubleOrNull() != null) {
+                                                finalText = c
+                                                finalBox = AndroidRect(box1.left,
+                                                    minOf(box1.top, box2.top),
+                                                    box2.right, maxOf(box1.bottom, box2.bottom))
+                                                skip = 1
+                                            }
+                                        }
+                                        // "10" + "." + "35"  →  "10.35"
+                                        text2 == "." -> {
+                                            val el3 = line.elements.getOrNull(i + 2)
+                                            val box3 = el3?.boundingBox
+                                            if (el3 != null && box3 != null &&
+                                                box3.left - box2.right <= box1.height()) {
+                                                val text3 = el3.text.replace(currencyRe, "").replace(",", "").trim().replace(trailingLetters, "")
+                                                val c = "$text1.$text3"
+                                                if (text3.matches(Regex("\\d+")) && c.toDoubleOrNull() != null) {
+                                                    finalText = c
+                                                    finalBox = AndroidRect(box1.left,
+                                                        minOf(box1.top, box2.top, box3.top),
+                                                        box3.right, maxOf(box1.bottom, box2.bottom, box3.bottom))
+                                                    skip = 2
+                                                }
+                                            }
+                                        }
+                                    }
+                                }
+                            }
+
+                            val value = finalText.toDoubleOrNull()
+                            if (value == null || value <= 0) { i++; continue }
+                            found.add(DetectedNumber(rawText = finalText, value = value, imageBox = finalBox))
+                            i += 1 + skip
                         }
                     }
                 }
@@ -1940,11 +2030,14 @@ private fun OcrOverlayScreen(
             IconButton(onClick = onClose) {
                 Icon(Icons.Default.Close, null, tint = Color.White)
             }
-            Text("$fromCurrency → $toCurrency", color = Color.White, fontSize = 15.sp,
+            Text("${currencySymbol(fromCurrency)} → ${currencySymbol(toCurrency)}", color = Color.White, fontSize = 15.sp,
                 fontWeight = FontWeight.Medium)
             if (exchangeRate != null) {
                 Text("  (1 = ${"%.4f".format(exchangeRate)})", color = Color.White.copy(0.55f), fontSize = 11.sp)
             }
+            Spacer(Modifier.weight(1f))
+            Text("Pinch to zoom", color = Color.White.copy(0.45f), fontSize = 10.sp,
+                modifier = Modifier.padding(end = 12.dp))
         }
 
         // Image + overlay
@@ -1957,79 +2050,122 @@ private fun OcrOverlayScreen(
                     val containerH = constraints.maxHeight.toFloat()
                     val imgW = bitmap.width.toFloat()
                     val imgH = bitmap.height.toFloat()
-                    val scale = min(containerW / imgW, containerH / imgH)
-                    val offsetX = (containerW - imgW * scale) / 2f
-                    val offsetY = (containerH - imgH * scale) / 2f
+                    val baseScale = min(containerW / imgW, containerH / imgH)
+                    val fitOffsetX = (containerW - imgW * baseScale) / 2f
+                    val fitOffsetY = (containerH - imgH * baseScale) / 2f
 
-                    Image(
-                        bitmap = bitmap.asImageBitmap(),
-                        contentDescription = null,
-                        contentScale = ContentScale.Fit,
-                        modifier = Modifier.fillMaxSize()
-                    )
-
-                    // Bounding box outlines
-                    Canvas(modifier = Modifier.fillMaxSize()) {
-                        for (det in detections) {
-                            val r = det.imageBox
-                            drawRoundRect(
-                                color = if (det.selected) Color(0xFFFFD700) else Color.White.copy(0.65f),
-                                topLeft = Offset(r.left * scale + offsetX, r.top * scale + offsetY),
-                                size = Size(r.width() * scale, r.height() * scale),
-                                cornerRadius = CornerRadius(4.dp.toPx()),
-                                style = Stroke(width = if (det.selected) 3.dp.toPx() else 1.5f.dp.toPx())
+                    // Zoomed/panned layer: image + bounding boxes + bubbles all transform together
+                    Box(
+                        modifier = Modifier
+                            .fillMaxSize()
+                            .graphicsLayer(
+                                scaleX = zoom,
+                                scaleY = zoom,
+                                translationX = panOffset.x,
+                                translationY = panOffset.y
                             )
-                        }
-                    }
+                    ) {
+                        Image(
+                            bitmap = bitmap.asImageBitmap(),
+                            contentDescription = null,
+                            contentScale = ContentScale.Fit,
+                            modifier = Modifier.fillMaxSize()
+                        )
 
-                    // Converted value bubbles for selected items
-                    if (exchangeRate != null) {
-                        for (det in selectedItems) {
-                            val r = det.imageBox
-                            val bubbleX = (r.left * scale + offsetX).roundToInt()
-                            val bubbleY = (r.bottom * scale + offsetY + 4).roundToInt()
-                            Box(
-                                modifier = Modifier
-                                    .offset { IntOffset(bubbleX, bubbleY) }
-                                    .background(Color(0xDD000000), RoundedCornerShape(4.dp))
-                                    .padding(horizontal = 5.dp, vertical = 2.dp)
-                            ) {
-                                Text(
-                                    "$toCurrency ${"%.2f".format(det.value * exchangeRate)}",
-                                    color = Color(0xFFFFD700),
-                                    fontSize = 11.sp,
-                                    fontWeight = FontWeight.Bold
+                        // Bounding box outlines (drawn in fit-scale coordinate space)
+                        Canvas(modifier = Modifier.fillMaxSize()) {
+                            for (det in detections) {
+                                val r = det.imageBox
+                                drawRoundRect(
+                                    color = if (det.selected) Color(0xFFFFD700) else Color.White.copy(0.65f),
+                                    topLeft = Offset(r.left * baseScale + fitOffsetX, r.top * baseScale + fitOffsetY),
+                                    size = Size(r.width() * baseScale, r.height() * baseScale),
+                                    cornerRadius = CornerRadius(4.dp.toPx()),
+                                    style = Stroke(width = if (det.selected) 3.dp.toPx() else 1.5f.dp.toPx())
                                 )
                             }
                         }
-                    }
 
-                    // Tap handler
-                    Box(modifier = Modifier.fillMaxSize().pointerInput(detections) {
-                        detectTapGestures { tap ->
-                            val imgX = ((tap.x - offsetX) / scale).toInt()
-                            val imgY = ((tap.y - offsetY) / scale).toInt()
-                            var hitIndex = -1
-                            detections.forEachIndexed { i, det ->
-                                if (hitIndex < 0 && det.imageBox.contains(imgX, imgY)) hitIndex = i
-                            }
-                            if (hitIndex >= 0) {
-                                detections = detections.mapIndexed { i, det ->
-                                    if (i == hitIndex) {
-                                        val newSelected = !det.selected
-                                        if (newSelected) {
-                                            lastTappedValue = if (det.value == kotlin.math.floor(det.value))
-                                                det.value.toLong().toString()
-                                            else "%.2f".format(det.value)
-                                        }
-                                        det.copy(selected = newSelected)
-                                    } else det
+                        // Converted value bubbles — font size proportional to bounding box height,
+                        // box content-sized so text always renders regardless of zoom level
+                        if (exchangeRate != null) {
+                            val density = LocalDensity.current
+                            for (det in selectedItems) {
+                                val r = det.imageBox
+                                val bubbleX = (r.left * baseScale + fitOffsetX).roundToInt()
+                                val bubbleY = (r.top  * baseScale + fitOffsetY).roundToInt()
+                                val boxH = with(density) { (r.height() * baseScale).toDp() }
+                                val fontSize = (boxH.value / density.fontScale * 0.75f)
+                                    .coerceIn(6f, 11f).sp
+                                Box(
+                                    modifier = Modifier
+                                        .offset { IntOffset(bubbleX, bubbleY) }
+                                        .background(Color(0xDD000000), RoundedCornerShape(3.dp))
+                                        .padding(horizontal = 4.dp)
+                                ) {
+                                    Text(
+                                        "${currencySymbol(toCurrency)}${"%.2f".format(det.value * exchangeRate)}",
+                                        color = Color(0xFFFFD700),
+                                        style = TextStyle(
+                                            fontSize = fontSize,
+                                            fontWeight = FontWeight.Bold,
+                                            platformStyle = PlatformTextStyle(includeFontPadding = false)
+                                        )
+                                    )
                                 }
                             }
                         }
-                    })
+                    }
 
-                    if (!isLoading && detections.isEmpty()) {
+                    // Gesture overlay: pinch-to-zoom + pan, then tap to select
+                    Box(
+                        modifier = Modifier
+                            .fillMaxSize()
+                            .pointerInput(Unit) {
+                                detectTransformGestures { _, pan, zoomChange, _ ->
+                                    val newZoom = (zoom * zoomChange).coerceIn(1f, 5f)
+                                    val maxPanX = containerW * (newZoom - 1f) / 2f
+                                    val maxPanY = containerH * (newZoom - 1f) / 2f
+                                    panOffset = Offset(
+                                        (panOffset.x + pan.x).coerceIn(-maxPanX, maxPanX),
+                                        (panOffset.y + pan.y).coerceIn(-maxPanY, maxPanY)
+                                    )
+                                    zoom = newZoom
+                                    // Re-clamp pan if zoom decreased below prior value
+                                    if (newZoom == 1f) panOffset = Offset.Zero
+                                }
+                            }
+                            .pointerInput(detections, zoom, panOffset) {
+                                detectTapGestures { tap ->
+                                    // graphicsLayer scales around the center of the Box;
+                                    // invert that transform to get fit-scale coordinates
+                                    val fx = (tap.x - containerW / 2f - panOffset.x) / zoom + containerW / 2f
+                                    val fy = (tap.y - containerH / 2f - panOffset.y) / zoom + containerH / 2f
+                                    // fit-scale → image pixel space
+                                    val imgX = ((fx - fitOffsetX) / baseScale).toInt()
+                                    val imgY = ((fy - fitOffsetY) / baseScale).toInt()
+                                    var hitIndex = -1
+                                    detections.forEachIndexed { i, det ->
+                                        if (hitIndex < 0 && det.imageBox.contains(imgX, imgY)) hitIndex = i
+                                    }
+                                    if (hitIndex >= 0) {
+                                        detections = detections.mapIndexed { i, det ->
+                                            if (i == hitIndex) {
+                                                val newSelected = !det.selected
+                                                if (newSelected) {
+                                                    lastTappedValue = if (det.value == kotlin.math.floor(det.value))
+                                                        det.value.toLong().toString()
+                                                    else "%.2f".format(det.value)
+                                                }
+                                                det.copy(selected = newSelected)
+                                            } else det
+                                        }
+                                    }
+                                }
+                            }
+                    )
+
+                    if (detections.isEmpty()) {
                         Text(
                             "No numbers detected\nTry a clearer photo",
                             color = Color.White.copy(0.7f),
@@ -2043,32 +2179,107 @@ private fun OcrOverlayScreen(
 
         // Bottom bar — only shown when items are selected
         if (selectedItems.isNotEmpty()) {
-            Row(
+            val totalStr = if (selectedTotal == kotlin.math.floor(selectedTotal))
+                selectedTotal.toLong().toString() else "%.2f".format(selectedTotal)
+            Column(
                 modifier = Modifier
                     .fillMaxWidth()
                     .background(Color(0xEE000000))
-                    .padding(horizontal = 16.dp, vertical = 10.dp),
-                verticalAlignment = Alignment.CenterVertically
+                    .padding(horizontal = 16.dp, vertical = 10.dp)
             ) {
-                Column(modifier = Modifier.weight(1f)) {
-                    Text(
-                        "Selected: $fromCurrency ${"%.2f".format(selectedTotal)}",
-                        color = Color.White, fontSize = 12.sp
-                    )
-                    if (exchangeRate != null) {
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Column(modifier = Modifier.weight(1f)) {
                         Text(
-                            "= $toCurrency ${"%.2f".format(selectedTotal * exchangeRate)}",
-                            color = Color(0xFFFFD700), fontSize = 16.sp, fontWeight = FontWeight.Bold
+                            "Selected: ${currencySymbol(fromCurrency)}${"%.2f".format(selectedTotal)}",
+                            color = Color.White, fontSize = 12.sp
                         )
+                        if (exchangeRate != null) {
+                            Text(
+                                "= ${currencySymbol(toCurrency)}${"%.2f".format(selectedTotal * exchangeRate)}",
+                                color = Color(0xFFFFD700), fontSize = 16.sp, fontWeight = FontWeight.Bold
+                            )
+                        }
+                    }
+                    val useVal = lastTappedValue
+                    if (useVal != null) {
+                        Button(
+                            onClick = { pendingValue = useVal },
+                            colors = ButtonDefaults.buttonColors(containerColor = colors.surface)
+                        ) {
+                            Text("Use $useVal", color = colors.textPrimary, fontWeight = FontWeight.Bold)
+                        }
                     }
                 }
-                val useVal = lastTappedValue
-                if (useVal != null) {
+                if (exchangeRate != null) {
+                    val convertedTotal = selectedTotal * exchangeRate
+                    val convertedStr = if (convertedTotal == kotlin.math.floor(convertedTotal))
+                        convertedTotal.toLong().toString() else "%.2f".format(convertedTotal)
+                    Spacer(Modifier.height(6.dp))
+                    Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                        Button(
+                            onClick = { pendingValue = totalStr },
+                            modifier = Modifier.weight(1f),
+                            colors = ButtonDefaults.buttonColors(containerColor = colors.surface)
+                        ) {
+                            Text("Use ${currencySymbol(fromCurrency)}$totalStr",
+                                color = colors.textPrimary, fontWeight = FontWeight.Bold,
+                                maxLines = 1, overflow = TextOverflow.Ellipsis)
+                        }
+                        Button(
+                            onClick = { pendingValue = convertedStr },
+                            modifier = Modifier.weight(1f),
+                            colors = ButtonDefaults.buttonColors(containerColor = colors.equals)
+                        ) {
+                            Text("Use ${currencySymbol(toCurrency)}$convertedStr",
+                                color = colors.equalsContent, fontWeight = FontWeight.Bold,
+                                maxLines = 1, overflow = TextOverflow.Ellipsis)
+                        }
+                    }
+                } else {
+                    Spacer(Modifier.height(6.dp))
                     Button(
-                        onClick = { onUseAmount(useVal) },
+                        onClick = { pendingValue = totalStr },
+                        modifier = Modifier.fillMaxWidth(),
                         colors = ButtonDefaults.buttonColors(containerColor = colors.equals)
                     ) {
-                        Text("Use $useVal", color = colors.equalsContent, fontWeight = FontWeight.Bold)
+                        Text("Use ${currencySymbol(fromCurrency)}$totalStr",
+                            color = colors.equalsContent, fontWeight = FontWeight.Bold)
+                    }
+                }
+            }
+        }
+
+        // Mode picker dialog — shown when any "use" action is triggered
+        val pv = pendingValue
+        if (pv != null) {
+            Dialog(onDismissRequest = { pendingValue = null }) {
+                Surface(shape = RoundedCornerShape(16.dp), color = colors.surface) {
+                    Column(modifier = Modifier.padding(24.dp)) {
+                        Text("Use $pv in…", color = colors.textPrimary,
+                            fontSize = 16.sp, fontWeight = FontWeight.Medium)
+                        Spacer(Modifier.height(16.dp))
+                        Button(
+                            onClick = { onUseAmount(pv, ConversionMode.CURRENCY); pendingValue = null },
+                            modifier = Modifier.fillMaxWidth(),
+                            colors = ButtonDefaults.buttonColors(containerColor = colors.equals)
+                        ) {
+                            Text("💱 FX Mode", color = colors.equalsContent, fontWeight = FontWeight.Bold)
+                        }
+                        Spacer(Modifier.height(8.dp))
+                        Button(
+                            onClick = { onUseAmount(pv, ConversionMode.TIP); pendingValue = null },
+                            modifier = Modifier.fillMaxWidth(),
+                            colors = ButtonDefaults.buttonColors(containerColor = colors.operator)
+                        ) {
+                            Text("🍽 Tip Mode", color = colors.operatorContent, fontWeight = FontWeight.Bold)
+                        }
+                        Spacer(Modifier.height(8.dp))
+                        TextButton(
+                            onClick = { pendingValue = null },
+                            modifier = Modifier.fillMaxWidth()
+                        ) {
+                            Text("Cancel", color = colors.textSecondary)
+                        }
                     }
                 }
             }
