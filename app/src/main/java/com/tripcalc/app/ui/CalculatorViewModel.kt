@@ -189,7 +189,8 @@ data class CalculatorUiState(
     val womensToCountry: String = "UK",
     val mensFromCountry: String = "US/UK",
     val mensToCountry: String = "EU",
-    val exchangeRate: Double? = null
+    val exchangeRate: Double? = null,
+    val ocrConvertEnabled: Boolean = true
 )
 
 sealed class CalculatorAction {
@@ -244,6 +245,7 @@ sealed class CalculatorAction {
     data class SetWomensCountries(val from: String, val to: String) : CalculatorAction()
     data class SetMensCountries(val from: String, val to: String) : CalculatorAction()
     object DismissHelpHint : CalculatorAction()
+    data class SetOcrConvertEnabled(val enabled: Boolean) : CalculatorAction()
 }
 
 private data class BracketState(val firstOperand: Double?, val pendingOp: Char?)
@@ -292,7 +294,8 @@ class CalculatorViewModel(application: Application) : AndroidViewModel(applicati
             val (womensFrom, womensTo) = repository.loadWomensCountries()
             val (mensFrom, mensTo) = repository.loadMensCountries()
             val helpHintSeen = repository.loadHelpHintSeen()
-            _uiState.update { it.copy(toCurrency = to, fromCurrency = from, recentCurrencies = recents, customRates = customRates, hapticEnabled = hapticEnabled, history = history, darkModePref = darkModePref, accentScheme = accentScheme, defaultTipPercent = defaultTipPercent, tipPercent = defaultTipPercent, customTipPercent = customTipPercent, fuelUseUkGallons = fuelUseUkGallons, swapZeroDot = swapZeroDot, enabledModes = enabledModes, enabledDistancePairs = enabledDistancePairs, cardProfiles = cardProfiles, activeCardId = activeCardId, sizeCategory = sizeCategory, shoeIsMens = shoeIsMens, shoeFromCountry = shoeFrom, shoeToCountry = shoeTo, womensFromCountry = womensFrom, womensToCountry = womensTo, mensFromCountry = mensFrom, mensToCountry = mensTo, helpHintSeen = helpHintSeen) }
+            val ocrConvertEnabled = repository.loadOcrConvertEnabled()
+            _uiState.update { it.copy(toCurrency = to, fromCurrency = from, recentCurrencies = recents, customRates = customRates, hapticEnabled = hapticEnabled, history = history, darkModePref = darkModePref, accentScheme = accentScheme, defaultTipPercent = defaultTipPercent, tipPercent = defaultTipPercent, customTipPercent = customTipPercent, fuelUseUkGallons = fuelUseUkGallons, swapZeroDot = swapZeroDot, enabledModes = enabledModes, enabledDistancePairs = enabledDistancePairs, cardProfiles = cardProfiles, activeCardId = activeCardId, sizeCategory = sizeCategory, shoeIsMens = shoeIsMens, shoeFromCountry = shoeFrom, shoeToCountry = shoeTo, womensFromCountry = womensFrom, womensToCountry = womensTo, mensFromCountry = mensFrom, mensToCountry = mensTo, helpHintSeen = helpHintSeen, ocrConvertEnabled = ocrConvertEnabled) }
             fetchRates(forceRefresh = false)
         }
     }
@@ -575,6 +578,11 @@ class CalculatorViewModel(application: Application) : AndroidViewModel(applicati
             is CalculatorAction.DismissHelpHint -> {
                 _uiState.update { it.copy(helpHintSeen = true) }
                 viewModelScope.launch { repository.saveHelpHintSeen() }
+                return
+            }
+            is CalculatorAction.SetOcrConvertEnabled -> {
+                _uiState.update { it.copy(ocrConvertEnabled = action.enabled) }
+                viewModelScope.launch { repository.saveOcrConvertEnabled(action.enabled) }
                 return
             }
             is CalculatorAction.DeleteHistoryEntry -> {

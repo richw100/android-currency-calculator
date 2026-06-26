@@ -313,6 +313,9 @@ fun AppScreen() {
                                     vm.onAction(CalculatorAction.PasteValue(amount))
                                     screen = Screen.Calculator
                                 },
+                                onToggleOcrConvert = {
+                                    vm.onAction(CalculatorAction.SetOcrConvertEnabled(!state.ocrConvertEnabled))
+                                },
                                 onClose = { screen = Screen.Calculator }
                             )
                         } else {
@@ -1824,6 +1827,17 @@ fun HelpScreen(modifier: Modifier = Modifier) {
             HelpItem("Online", "Rates are from er-api.com and are refreshed every 24 hours or when the refresh button is pressed. (Visa and Mastercard rates are not officially possible - sorry!).")
         }
 
+        HelpSection("Receipt Scanner") {
+            HelpItem("Opening it", "Tap the camera icon on the Currency tab to scan a receipt or photo.")
+            HelpItem("Selecting values", "Tap any detected number to highlight it — the converted amount appears as an overlay covering the original price. Tap again to deselect.")
+            HelpItem("Multiple items", "Tap several prices to build a total. The running total and its converted equivalent are shown at the bottom.")
+            HelpItem("Use buttons", "Tap 'Use £…' or 'Use $…' at the bottom to send a total straight to FX mode or Tip mode.")
+            HelpItem("Last tapped", "The 'Use X' button next to the total sends the last individual value you tapped.")
+            HelpItem("Zoom", "Pinch to zoom in on small print. Drag to pan once zoomed.")
+            HelpItem("Convert toggle", "Tap '💱 Convert: ON/OFF' in the top bar to switch between showing converted amounts and raw receipt amounts. Your setting is remembered.")
+            HelpItem("Currency detection", "When Convert is OFF, the app scans the receipt for currency symbols (£, $, €, ¥, etc.) and uses the detected currency in the display.")
+        }
+
         HelpSection("Card Profiles") {
             HelpItem("What they are", "Named profiles for your payment cards, each with its own foreign transaction fee and optional exchange rate overrides.")
             HelpItem("Adding a card", "Go to Settings → Card Profiles → Add card. Set a name and a fee percentage (e.g. 2.75%).")
@@ -1906,6 +1920,7 @@ private fun OcrOverlayScreen(
     uiState: CalculatorUiState,
     modifier: Modifier = Modifier,
     onUseAmount: (String, ConversionMode) -> Unit,
+    onToggleOcrConvert: () -> Unit,
     onClose: () -> Unit
 ) {
     val colors = LocalAppColors.current
@@ -1915,6 +1930,8 @@ private fun OcrOverlayScreen(
     var pendingValue by remember { mutableStateOf<String?>(null) }
     var zoom by remember { mutableStateOf(1f) }
     var panOffset by remember { mutableStateOf(Offset.Zero) }
+    var detectedReceiptCurrency by remember { mutableStateOf<String?>(null) }
+    val ocrConvertEnabled = uiState.ocrConvertEnabled
 
     BackHandler { onClose() }
 
@@ -2009,6 +2026,30 @@ private fun OcrOverlayScreen(
                         }
                     }
                 }
+                // Scan all OCR text for currency symbols/codes to identify the receipt currency
+                val receiptSymbolMap = mapOf(
+                    "£" to "GBP", "$" to "USD", "€" to "EUR", "¥" to "JPY",
+                    "₹" to "INR", "₩" to "KRW", "₪" to "ILS", "฿" to "THB",
+                    "₫" to "VND", "₦" to "NGN"
+                )
+                val receiptCodeRe = Regex("\\b(GBP|USD|EUR|JPY|AUD|CAD|CHF|CNY|HKD|SGD|NZD|MXN|SEK|NOK|DKK|PLN|CZK|HUF|TRY|INR|BRL|ZAR|THB|VND|IDR|MYR|PHP)\\b")
+                var foundReceiptCurrency: String? = null
+                outer@ for (block in result.textBlocks) {
+                    for (line in block.lines) {
+                        for (el in line.elements) {
+                            val t = el.text
+                            var matched = false
+                            for ((sym, code) in receiptSymbolMap) {
+                                if (sym in t) { foundReceiptCurrency = code; matched = true; break }
+                            }
+                            if (matched) break@outer
+                            val m = receiptCodeRe.find(t)
+                            if (m != null) { foundReceiptCurrency = m.value; break@outer }
+                        }
+                    }
+                }
+                detectedReceiptCurrency = foundReceiptCurrency
+
                 detections = found
                 isLoading = false
             }
@@ -2036,8 +2077,25 @@ private fun OcrOverlayScreen(
                 Text("  (1 = ${"%.4f".format(exchangeRate)})", color = Color.White.copy(0.55f), fontSize = 11.sp)
             }
             Spacer(Modifier.weight(1f))
-            Text("Pinch to zoom", color = Color.White.copy(0.45f), fontSize = 10.sp,
-                modifier = Modifier.padding(end = 12.dp))
+            Row(
+                modifier = Modifier
+                    .padding(end = 8.dp)
+                    .clip(RoundedCornerShape(50))
+                    .background(
+                        if (ocrConvertEnabled) Color(0xFFFFD700).copy(alpha = 0.18f)
+                        else Color.White.copy(alpha = 0.1f)
+                    )
+                    .clickable(onClick = onToggleOcrConvert)
+                    .padding(horizontal = 10.dp, vertical = 4.dp),
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Text(
+                    if (ocrConvertEnabled) "💱 Convert: ON" else "💱 Convert: OFF",
+                    color = if (ocrConvertEnabled) Color(0xFFFFD700) else Color.White.copy(0.6f),
+                    fontSize = 10.sp,
+                    fontWeight = FontWeight.Medium
+                )
+            }
         }
 
         // Image + overlay
@@ -2086,33 +2144,35 @@ private fun OcrOverlayScreen(
                             }
                         }
 
-                        // Converted value bubbles — font size proportional to bounding box height,
-                        // box content-sized so text always renders regardless of zoom level
-                        if (exchangeRate != null) {
-                            val density = LocalDensity.current
-                            for (det in selectedItems) {
-                                val r = det.imageBox
-                                val bubbleX = (r.left * baseScale + fitOffsetX).roundToInt()
-                                val bubbleY = (r.top  * baseScale + fitOffsetY).roundToInt()
-                                val boxH = with(density) { (r.height() * baseScale).toDp() }
-                                val fontSize = (boxH.value / density.fontScale * 0.75f)
-                                    .coerceIn(6f, 11f).sp
-                                Box(
-                                    modifier = Modifier
-                                        .offset { IntOffset(bubbleX, bubbleY) }
-                                        .background(Color(0xDD000000), RoundedCornerShape(3.dp))
-                                        .padding(horizontal = 4.dp)
-                                ) {
-                                    Text(
-                                        "${currencySymbol(toCurrency)}${"%.2f".format(det.value * exchangeRate)}",
-                                        color = Color(0xFFFFD700),
-                                        style = TextStyle(
-                                            fontSize = fontSize,
-                                            fontWeight = FontWeight.Bold,
-                                            platformStyle = PlatformTextStyle(includeFontPadding = false)
-                                        )
+                        // Value bubbles — show converted or raw depending on ocrConvertEnabled
+                        val density = LocalDensity.current
+                        val receiptSymbol = currencySymbol(detectedReceiptCurrency ?: fromCurrency)
+                        for (det in selectedItems) {
+                            val r = det.imageBox
+                            val bubbleX = (r.left * baseScale + fitOffsetX).roundToInt()
+                            val bubbleY = (r.top  * baseScale + fitOffsetY).roundToInt()
+                            val boxH = with(density) { (r.height() * baseScale).toDp() }
+                            val fontSize = (boxH.value / density.fontScale * 0.75f)
+                                .coerceIn(6f, 11f).sp
+                            val bubbleText = if (ocrConvertEnabled && exchangeRate != null)
+                                "${currencySymbol(toCurrency)}${"%.2f".format(det.value * exchangeRate)}"
+                            else
+                                "$receiptSymbol${"%.2f".format(det.value)}"
+                            Box(
+                                modifier = Modifier
+                                    .offset { IntOffset(bubbleX, bubbleY) }
+                                    .background(Color(0xDD000000), RoundedCornerShape(3.dp))
+                                    .padding(horizontal = 4.dp)
+                            ) {
+                                Text(
+                                    bubbleText,
+                                    color = Color(0xFFFFD700),
+                                    style = TextStyle(
+                                        fontSize = fontSize,
+                                        fontWeight = FontWeight.Bold,
+                                        platformStyle = PlatformTextStyle(includeFontPadding = false)
                                     )
-                                }
+                                )
                             }
                         }
                     }
@@ -2181,6 +2241,8 @@ private fun OcrOverlayScreen(
         if (selectedItems.isNotEmpty()) {
             val totalStr = if (selectedTotal == kotlin.math.floor(selectedTotal))
                 selectedTotal.toLong().toString() else "%.2f".format(selectedTotal)
+            val showConversion = ocrConvertEnabled && exchangeRate != null
+            val receiptSym = currencySymbol(detectedReceiptCurrency ?: fromCurrency)
             Column(
                 modifier = Modifier
                     .fillMaxWidth()
@@ -2190,12 +2252,12 @@ private fun OcrOverlayScreen(
                 Row(verticalAlignment = Alignment.CenterVertically) {
                     Column(modifier = Modifier.weight(1f)) {
                         Text(
-                            "Selected: ${currencySymbol(fromCurrency)}${"%.2f".format(selectedTotal)}",
+                            "Selected: $receiptSym${"%.2f".format(selectedTotal)}",
                             color = Color.White, fontSize = 12.sp
                         )
-                        if (exchangeRate != null) {
+                        if (showConversion) {
                             Text(
-                                "= ${currencySymbol(toCurrency)}${"%.2f".format(selectedTotal * exchangeRate)}",
+                                "= ${currencySymbol(toCurrency)}${"%.2f".format(selectedTotal * exchangeRate!!)}",
                                 color = Color(0xFFFFD700), fontSize = 16.sp, fontWeight = FontWeight.Bold
                             )
                         }
@@ -2210,18 +2272,18 @@ private fun OcrOverlayScreen(
                         }
                     }
                 }
-                if (exchangeRate != null) {
-                    val convertedTotal = selectedTotal * exchangeRate
+                Spacer(Modifier.height(6.dp))
+                if (showConversion) {
+                    val convertedTotal = selectedTotal * exchangeRate!!
                     val convertedStr = if (convertedTotal == kotlin.math.floor(convertedTotal))
                         convertedTotal.toLong().toString() else "%.2f".format(convertedTotal)
-                    Spacer(Modifier.height(6.dp))
                     Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                         Button(
                             onClick = { pendingValue = totalStr },
                             modifier = Modifier.weight(1f),
                             colors = ButtonDefaults.buttonColors(containerColor = colors.surface)
                         ) {
-                            Text("Use ${currencySymbol(fromCurrency)}$totalStr",
+                            Text("Use $receiptSym$totalStr",
                                 color = colors.textPrimary, fontWeight = FontWeight.Bold,
                                 maxLines = 1, overflow = TextOverflow.Ellipsis)
                         }
@@ -2236,13 +2298,12 @@ private fun OcrOverlayScreen(
                         }
                     }
                 } else {
-                    Spacer(Modifier.height(6.dp))
                     Button(
                         onClick = { pendingValue = totalStr },
                         modifier = Modifier.fillMaxWidth(),
                         colors = ButtonDefaults.buttonColors(containerColor = colors.equals)
                     ) {
-                        Text("Use ${currencySymbol(fromCurrency)}$totalStr",
+                        Text("Use $receiptSym$totalStr",
                             color = colors.equalsContent, fontWeight = FontWeight.Bold)
                     }
                 }

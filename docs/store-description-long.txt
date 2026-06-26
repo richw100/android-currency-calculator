@@ -1,8 +1,18 @@
 TripCalc — the calculator built for travel.
 
-Your travel companion for money and more. Live currency conversion across 161 currencies, card fee profiles so you always know what you'll actually pay, plus a tip calculator, fuel converter, distance and temperature tools, and an international clothing and shoe size guide — everything you need when you're away from home.
+Your travel companion for money and more. Live currency conversion across 161 currencies, a receipt scanner that converts prices on the spot, card fee profiles so you always know what you'll actually pay, plus a tip calculator, fuel converter, distance and temperature tools, and an international clothing and shoe size guide — everything you need when you're away from home.
 
 No ads. No account. No tracking.
+
+
+RECEIPT SCANNER
+
+Point your camera at any receipt and TripCalc reads the prices automatically. Tap any number to see its converted value overlaid directly on the receipt — covering the original price so nothing below is obscured. Select multiple items to build a running total, then send it straight to the currency converter or tip calculator in one tap.
+
+• Pinch to zoom for fine print
+• Split decimals (e.g. "10" and "35" printed separately) are merged automatically
+• Toggle conversion on or off — when off, the app detects the receipt's currency from symbols (£, $, €, ¥, etc.) and shows raw amounts
+• Currency symbols throughout — £, $, € instead of GBP, USD, EUR
 
 
 CURRENCY CONVERSION
@@ -47,6 +57,7 @@ Choose from five accent colour schemes. Switch between dark mode, light mode, or
 
 FEATURES AT A GLANCE
 
+• Receipt OCR scanner with live currency overlay and multi-select totalling
 • Live rates for 161 currencies, refreshed every 24 hours
 • Card fee profiles with minimum fee support and per-card rates
 • Tip calculator with bill splitting and FX hand-off

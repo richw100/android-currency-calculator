@@ -1,1 +1,1 @@
-Currency converter with card fees, tip, size & unit tools. No ads.
+Currency converter, receipt scanner, card fees & tip calculator. No ads.

@@ -93,7 +93,8 @@ class ExchangeRateRepository(private val context: Context) {
     }
 
     suspend fun loadRecentCurrencies(): List<String> {
-        val raw = context.dataStore.data.first()[RECENT_CURRENCIES_KEY] ?: return emptyList()
+        val raw = context.dataStore.data.first()[RECENT_CURRENCIES_KEY]
+            ?: return listOf("EUR", "USD", "GBP", "JPY", "AUD")
         return raw.split(",").filter { it.isNotBlank() }
     }
 
@@ -303,4 +304,13 @@ class ExchangeRateRepository(private val context: Context) {
 
     suspend fun loadHelpHintSeen(): Boolean =
         context.dataStore.data.first()[helpHintSeenKey] ?: false
+
+    private val ocrConvertEnabledKey = booleanPreferencesKey("ocr_convert_enabled")
+
+    suspend fun saveOcrConvertEnabled(enabled: Boolean) {
+        context.dataStore.edit { it[ocrConvertEnabledKey] = enabled }
+    }
+
+    suspend fun loadOcrConvertEnabled(): Boolean =
+        context.dataStore.data.first()[ocrConvertEnabledKey] ?: true
 }
