@@ -243,9 +243,11 @@ fun AppScreen() {
                         text = "Currency & Holiday Calculator",
                         color = colors.textPrimary,
                         fontSize = 18.sp,
-                        fontWeight = FontWeight.SemiBold
+                        fontWeight = FontWeight.SemiBold,
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis,
+                        modifier = Modifier.weight(1f)
                     )
-                    Spacer(modifier = Modifier.weight(1f))
                     if (screen == Screen.Calculator) {
                         IconButton(onClick = { showOcrSourceSheet = true }) {
                             Icon(Icons.Default.CameraAlt, contentDescription = "Scan receipt", tint = colors.textPrimary)
