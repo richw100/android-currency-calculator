@@ -453,6 +453,34 @@ fun AboutScreen(modifier: Modifier = Modifier) {
 
         OutlinedButton(
             onClick = {
+                context.startActivity(Intent(Intent.ACTION_VIEW, Uri.parse("https://richw100.github.io/android-currency-calculator/")))
+            },
+            modifier = Modifier.fillMaxWidth(),
+            shape = RoundedCornerShape(10.dp),
+            colors = ButtonDefaults.outlinedButtonColors(contentColor = colors.textSecondary),
+            border = androidx.compose.foundation.BorderStroke(1.dp, colors.divider)
+        ) {
+            Text("TripCalc website", fontSize = 15.sp, modifier = Modifier.padding(vertical = 4.dp))
+        }
+
+        Spacer(Modifier.height(12.dp))
+
+        OutlinedButton(
+            onClick = {
+                context.startActivity(Intent(Intent.ACTION_VIEW, Uri.parse("https://richw100.github.io/android-currency-calculator/privacy-policy.html")))
+            },
+            modifier = Modifier.fillMaxWidth(),
+            shape = RoundedCornerShape(10.dp),
+            colors = ButtonDefaults.outlinedButtonColors(contentColor = colors.textSecondary),
+            border = androidx.compose.foundation.BorderStroke(1.dp, colors.divider)
+        ) {
+            Text("Privacy policy", fontSize = 15.sp, modifier = Modifier.padding(vertical = 4.dp))
+        }
+
+        Spacer(Modifier.height(12.dp))
+
+        OutlinedButton(
+            onClick = {
                 context.startActivity(Intent(Intent.ACTION_VIEW, Uri.parse("https://github.com/richw100/android-currency-calculator")))
             },
             modifier = Modifier.fillMaxWidth(),
@@ -1899,6 +1927,21 @@ fun HelpScreen(modifier: Modifier = Modifier) {
             HelpItem("Tab visibility", "Show or hide individual calculator tabs (Tip, Fuel, Distance, Temperature) to keep the tab bar uncluttered.")
             HelpItem("Default tip %", "Sets the tip percentage pre-selected when you open the Tip tab.")
         }
+
+        Spacer(Modifier.height(24.dp))
+        HorizontalDivider(color = colors.divider)
+        Spacer(Modifier.height(16.dp))
+
+        val helpContext = LocalContext.current
+        Text(
+            text = "More information at tripcalc.app",
+            color = colors.operator,
+            fontSize = 13.sp,
+            textDecoration = androidx.compose.ui.text.style.TextDecoration.Underline,
+            modifier = Modifier.clickable {
+                helpContext.startActivity(Intent(Intent.ACTION_VIEW, Uri.parse("https://richw100.github.io/android-currency-calculator/")))
+            }
+        )
 
         Spacer(Modifier.height(24.dp))
     }

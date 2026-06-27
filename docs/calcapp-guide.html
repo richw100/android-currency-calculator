@@ -119,6 +119,10 @@
   <li>Exchange rate label showing full currency names and the current cross-rate</li>
   <li>Swap button to instantly reverse the from/to currencies</li>
   <li>Currency selection remembered between app launches</li>
+  <li>Receipt scanner — ML Kit OCR reads prices from a photo; tap any number to overlay its converted value directly on top of the original; multi-select builds a running total</li>
+  <li>Card fee profiles — named profiles with per-cent fee, minimum charge, and per-card exchange rate overrides</li>
+  <li>Tip calculator with bill splitting and FX hand-off</li>
+  <li>Unit converters: distance, temperature, fuel economy, clothing and shoe sizes</li>
 </ul>
 
 <h3>Technology choices</h3>
@@ -130,6 +134,7 @@
   <tr><td>DataStore</td><td>SQLite / SharedPreferences</td><td>Simple key-value persistence; SharedPreferences is deprecated for new code</td></tr>
   <tr><td>open.er-api.com</td><td>fixer.io, exchangerate-api.com</td><td>Free, no API key required, 161 currencies</td></tr>
   <tr><td>java.util.Currency</td><td>Hardcoded name map</td><td>Built into the JVM; gives localised display names for every ISO 4217 code with no extra dependency</td></tr>
+  <tr><td>ML Kit Text Recognition</td><td>Tesseract, custom model</td><td>On-device OCR — no network call, works offline, Google-maintained accuracy</td></tr>
 </table>
 
 <!-- ============================================================ -->
@@ -529,6 +534,28 @@ val toName   = JavaCurrency.getInstance(toCode).displayName    // e.g. "Euro"
 val rateLabel = "1 $fromCode ($fromName) = ${"%.4f".format(toRate / fromRate)} $toCode ($toName)"
 // → "1 GBP (British Pound Sterling) = 1.1732 EUR (Euro)"</code></pre>
 
+<h3><span class="file-header">ui/HistoryScreen.kt</span></h3>
+<p>A scrollable list of saved conversions (up to 50 entries). Tapping any entry restores the currencies and amount to the calculator. A notes icon on each row opens an edit dialog so the user can label what a conversion was for. History is persisted as a JSON array in DataStore.</p>
+
+<h3><span class="file-header">ui/SettingsScreen.kt</span></h3>
+<p>Appearance (theme, accent colour), haptic toggle, tab visibility, tip percentage default, fuel units, distance pairs, and card profile management. Card profiles are stored as a JSON list in DataStore; each entry carries a name, fee percent, optional minimum fee amount and currency, and a map of per-card custom rates.</p>
+
+<h3><span class="file-header">ui/CalculatorScreen.kt — Receipt Scanner (OcrOverlayScreen)</span></h3>
+<p>The receipt scanner is a full-screen overlay composable (<code>OcrOverlayScreen</code>) launched from the Currency tab. The flow:</p>
+<ol>
+  <li><strong>Image capture</strong> — a camera launcher (<code>rememberLauncherForActivityResult</code>) fires <code>MediaStore.ACTION_IMAGE_CAPTURE</code>. The returned <code>Bitmap</code> is passed to <code>OcrOverlayScreen</code>.</li>
+  <li><strong>OCR</strong> — inside a <code>LaunchedEffect</code>, the bitmap is wrapped in an <code>InputImage</code> and passed to ML Kit's <code>TextRecognition.getClient()</code>. The <code>addOnSuccessListener</code> callback walks the result tree (<code>TextBlock → TextLine → TextElement</code>) and extracts every element whose text parses as a decimal number. Each detection is stored as a <code>DetectedNumber(value, imageBox)</code> — a pixel-space bounding box in the original image.</li>
+  <li><strong>Currency detection</strong> — the same OCR pass scans all element text for currency symbols and ISO codes (£, $, €, ¥, USD, GBP, etc.) using a lookup map. The first match sets <code>detectedReceiptCurrency</code>.</li>
+  <li><strong>Render</strong> — the bitmap is drawn with <code>Image(bitmap)</code> inside a <code>graphicsLayer</code> box that handles pinch-to-zoom and pan via <code>detectTransformGestures</code>. Image coordinates are mapped to screen coordinates using <code>baseScale</code> (fit-to-box scale) and <code>fitOffsetX/Y</code> (letterbox offsets).</li>
+  <li><strong>Selection overlay</strong> — when a detection is tapped (<code>detectTapGestures</code> converts screen → image pixels), it toggles into a <code>selected</code> set. Selected detections render a filled dark box at exactly the bounding-box coordinates, with the converted amount in gold text centred inside — covering the original number. Unselected detections show a faint outline box.</li>
+  <li><strong>Convert toggle</strong> — a chip in the top bar switches between showing converted amounts and raw receipt amounts. When off, the detected receipt currency is used for display. The setting is persisted to DataStore via <code>CalculatorAction.SetOcrConvertEnabled</code>.</li>
+  <li><strong>Bottom bar</strong> — shows the running total of selected items (in receipt currency) and the converted equivalent, plus "Use £…" and "Use $…" buttons that dispatch <code>CalculatorAction.Digit</code> / <code>SetConversionMode</code> events to populate the main calculator.</li>
+</ol>
+
+<div class="callout info">
+  <strong>Why <code>break@outer</code> for currency detection:</strong> The detection loop is three levels deep (blocks → lines → elements). Kotlin's <code>forEach</code> lambdas don't support <code>break</code>, so the loops are written as labelled <code>for</code> loops with <code>break@outer</code> to exit all three once a currency symbol is found.
+</div>
+
 <h3><span class="file-header">ui/CalculatorScreen.kt</span></h3>
 <p>All the UI code. The screen layout from top to bottom:</p>
 <ol>
@@ -636,6 +663,18 @@ private val ButtonOrange = Color(0xFFFF9F0A)  // operators and =</code></pre>
   <li><code>currentInput</code> is set to the final formatted result</li>
   <li>All state is reset: <code>firstOperand = null</code>, <code>pendingOp = null</code>, <code>bracketStack.clear()</code>, <code>expressionDisplay.clear()</code></li>
   <li><code>justCalculated = true</code> — the next digit starts a fresh calculation rather than appending to the result</li>
+</ol>
+
+<h3>User scans a receipt</h3>
+<ol>
+  <li>User taps the camera icon on the Currency tab → <code>cameraLauncher.launch(uri)</code> fires</li>
+  <li>Android camera app captures an image and returns a <code>Bitmap</code></li>
+  <li><code>OcrOverlayScreen</code> is shown with the bitmap; a <code>LaunchedEffect</code> passes it to ML Kit</li>
+  <li>ML Kit processes the image on-device (no network call) and returns a <code>Text</code> result tree</li>
+  <li>The app parses detected elements: numbers → <code>DetectedNumber</code> list; symbols → <code>detectedReceiptCurrency</code></li>
+  <li>Compose renders bounding-box overlays on the image; user taps a price to select/deselect it</li>
+  <li>Selected prices accumulate in a running total shown in the bottom bar</li>
+  <li>Tapping "Use £…" dispatches the total as digit inputs to the main calculator state machine</li>
 </ol>
 
 <h3>Network request lifecycle</h3>

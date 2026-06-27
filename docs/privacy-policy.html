@@ -39,6 +39,18 @@
     and does not ask for your name, email address, location, or any other identifying information.
   </p>
 
+  <h2>Camera and photos</h2>
+  <p>
+    The receipt scanner feature uses your device camera to capture photos of receipts or price tags.
+    Photos are processed entirely on your device using Google's ML Kit text recognition library — they are
+    <strong>never uploaded, transmitted, or stored</strong> anywhere outside your device. Each photo exists only in
+    memory for the duration of the scanning session and is discarded when you close the scanner.
+  </p>
+  <p>
+    The app requests camera permission only when you first tap the camera icon. If you decline,
+    the receipt scanner is unavailable but all other features continue to work normally.
+  </p>
+
   <h2>Data stored on your device</h2>
   <p>The following data is stored locally on your device only and is never transmitted to us:</p>
   <ul>
@@ -49,6 +61,7 @@
     <li>Calculation and conversion history, including any notes you have added</li>
     <li>Size converter preferences (selected countries and categories)</li>
     <li>App preferences (theme, accent colour, haptic feedback, tab visibility, tip percentage, fuel units)</li>
+    <li>Receipt scanner setting (whether currency conversion is shown in the scanner overlay)</li>
   </ul>
   <p>All data stays on your device. Uninstalling the app removes it completely.</p>
 
@@ -65,8 +78,11 @@
   fully functional offline using the most recently cached rates.</p>
 
   <h2>Third-party services</h2>
-  <p>The app uses no analytics SDKs, advertising networks, or crash reporting tools.
-  The only external service contacted is open.er-api.com as described above.</p>
+  <p>The app uses no analytics SDKs, advertising networks, or crash reporting tools. The external services used are:</p>
+  <ul>
+    <li><strong>open.er-api.com</strong> — exchange rate data, as described above. No personal data is sent.</li>
+    <li><strong>Google ML Kit Text Recognition</strong> — on-device OCR library used by the receipt scanner. All processing happens locally on your device; no image data or text results leave the app. See <a href="https://developers.google.com/ml-kit/terms" target="_blank">Google ML Kit terms</a> for details on the SDK itself.</li>
+  </ul>
 
   <h2>Children's privacy</h2>
   <p>
