@@ -1512,7 +1512,7 @@ private fun TipBreakdownDisplay(
             val rateStr = if (rate == rate.toLong().toDouble()) "${rate.toLong()}%" else "${"%.1f".format(rate)}%"
             append("Tax ($rateStr ${if (bd.taxIncludedStyle) "incl." else "added"}): ${"%.2f".format(bd.taxAmount)}\n")
         }
-        if (noTip) append("Service included\n") else append("Tip ($pctLabel%): ${"%.2f".format(bd.tipAmount)}\n")
+        if (!noTip) append("Tip ($pctLabel%): ${"%.2f".format(bd.tipAmount)}\n")
         append("Total: ${"%.2f".format(bd.total)}")
         if (bd.perPerson != null) append("\nEach: ${"%.2f".format(bd.perPerson)}")
     }
@@ -1526,9 +1526,7 @@ private fun TipBreakdownDisplay(
             val taxLabel = if (bd.taxIncludedStyle) "Tax ($rateStr incl.):" else "Tax ($rateStr):"
             CopyableAmount(text = "$taxLabel  ${"%.2f".format(bd.taxAmount)}", color = colors.textMuted, shareText = shareText)
         }
-        if (noTip) {
-            CopyableAmount(text = "Service included", color = colors.textMuted, shareText = shareText)
-        } else {
+        if (!noTip) {
             CopyableAmount(text = "Tip ($pctLabel%):  ${"%.2f".format(bd.tipAmount)}", color = colors.textSecondary, shareText = shareText)
         }
         if (onConvertToFX != null && bill > 0) {
