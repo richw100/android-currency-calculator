@@ -168,6 +168,24 @@ class ExchangeRateRepository(private val context: Context) {
     suspend fun loadCustomTipPercent(): Double =
         context.dataStore.data.first()[customTipPercentKey]?.toDoubleOrNull() ?: 12.5
 
+    private val tipPreset0Key = stringPreferencesKey("tip_preset_0")
+    private val tipPreset1Key = stringPreferencesKey("tip_preset_1")
+    private val tipPreset2Key = stringPreferencesKey("tip_preset_2")
+
+    suspend fun saveTipPreset(index: Int, value: Double) {
+        val key = when (index) { 0 -> tipPreset0Key; 1 -> tipPreset1Key; else -> tipPreset2Key }
+        context.dataStore.edit { it[key] = value.toString() }
+    }
+
+    suspend fun loadTipPresets(): List<Double> {
+        val prefs = context.dataStore.data.first()
+        return listOf(
+            prefs[tipPreset0Key]?.toDoubleOrNull() ?: 10.0,
+            prefs[tipPreset1Key]?.toDoubleOrNull() ?: 15.0,
+            prefs[tipPreset2Key]?.toDoubleOrNull() ?: 20.0
+        )
+    }
+
     private val fuelUseUkGallonsKey = booleanPreferencesKey("fuel_use_uk_gallons")
 
     suspend fun saveFuelUseUkGallons(useUk: Boolean) {
@@ -313,4 +331,62 @@ class ExchangeRateRepository(private val context: Context) {
 
     suspend fun loadOcrConvertEnabled(): Boolean =
         context.dataStore.data.first()[ocrConvertEnabledKey] ?: true
+
+    // ── Tax / location ────────────────────────────────────────────────────────
+
+    private val taxEnabledKey      = booleanPreferencesKey("tax_enabled")
+    private val taxCountryCodeKey  = stringPreferencesKey("tax_country_code")
+    private val taxStateCodeKey    = stringPreferencesKey("tax_state_code")
+    private val taxRateOverrideKey = stringPreferencesKey("tax_rate_override")
+    private val taxAppliedKey      = booleanPreferencesKey("tax_applied")
+    private val tipAfterTaxKey     = booleanPreferencesKey("tip_after_tax")
+    private val noTipKey           = booleanPreferencesKey("no_tip")
+
+    suspend fun saveTaxEnabled(enabled: Boolean) {
+        context.dataStore.edit { it[taxEnabledKey] = enabled }
+    }
+    suspend fun loadTaxEnabled(): Boolean =
+        context.dataStore.data.first()[taxEnabledKey] ?: false
+
+    suspend fun saveTaxCountryCode(code: String?) {
+        context.dataStore.edit {
+            if (code != null) it[taxCountryCodeKey] = code else it.remove(taxCountryCodeKey)
+        }
+    }
+    suspend fun loadTaxCountryCode(): String? =
+        context.dataStore.data.first()[taxCountryCodeKey]
+
+    suspend fun saveTaxStateCode(code: String?) {
+        context.dataStore.edit {
+            if (code != null) it[taxStateCodeKey] = code else it.remove(taxStateCodeKey)
+        }
+    }
+    suspend fun loadTaxStateCode(): String? =
+        context.dataStore.data.first()[taxStateCodeKey]
+
+    suspend fun saveTaxRateOverride(rate: Double?) {
+        context.dataStore.edit {
+            if (rate != null) it[taxRateOverrideKey] = rate.toString() else it.remove(taxRateOverrideKey)
+        }
+    }
+    suspend fun loadTaxRateOverride(): Double? =
+        context.dataStore.data.first()[taxRateOverrideKey]?.toDoubleOrNull()
+
+    suspend fun saveTaxApplied(applied: Boolean) {
+        context.dataStore.edit { it[taxAppliedKey] = applied }
+    }
+    suspend fun loadTaxApplied(): Boolean =
+        context.dataStore.data.first()[taxAppliedKey] ?: true
+
+    suspend fun saveTipAfterTax(afterTax: Boolean) {
+        context.dataStore.edit { it[tipAfterTaxKey] = afterTax }
+    }
+    suspend fun loadTipAfterTax(): Boolean =
+        context.dataStore.data.first()[tipAfterTaxKey] ?: false
+
+    suspend fun saveNoTip(noTip: Boolean) {
+        context.dataStore.edit { it[noTipKey] = noTip }
+    }
+    suspend fun loadNoTip(): Boolean =
+        context.dataStore.data.first()[noTipKey] ?: false
 }

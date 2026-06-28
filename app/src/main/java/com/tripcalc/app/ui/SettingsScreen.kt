@@ -32,6 +32,9 @@ import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import com.tripcalc.app.data.CANADA_PROVINCE_TAX_RATES
+import com.tripcalc.app.data.EU_VAT_RATES
+import com.tripcalc.app.data.US_STATE_TAX_RATES
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -51,6 +54,9 @@ fun SettingsScreen(vm: CalculatorViewModel, modifier: Modifier = Modifier) {
     }
     val customTipValue = customTipInput.toDoubleOrNull()
     val customTipValid = customTipValue != null && customTipValue > 0 && customTipValue <= 100
+    var showTaxCountryPicker by remember { mutableStateOf(false) }
+    var showTaxStatePicker by remember { mutableStateOf(false) }
+    var showTaxRateEditDialog by remember { mutableStateOf(false) }
 
     if (showCardDialog) {
         val liveCard = editingCard?.let { c -> state.cardProfiles.find { it.id == c.id } } ?: editingCard
@@ -66,6 +72,44 @@ fun SettingsScreen(vm: CalculatorViewModel, modifier: Modifier = Modifier) {
                 showCardDialog = false; editingCard = null
             },
             onDismiss = { showCardDialog = false; editingCard = null }
+        )
+    }
+
+    if (showTaxCountryPicker) {
+        TaxCountryPickerDialog(
+            onSelect = { code ->
+                vm.onAction(CalculatorAction.SetTaxCountry(code))
+                showTaxCountryPicker = false
+                if (code == "US" || code == "CA") showTaxStatePicker = true
+            },
+            onDismiss = { showTaxCountryPicker = false }
+        )
+    }
+    if (showTaxStatePicker) {
+        val countryCode = state.taxCountryCode
+        TaxRegionPickerDialog(
+            title = if (countryCode == "CA") "Select province" else "Select state",
+            entries = if (countryCode == "CA") CANADA_PROVINCE_TAX_RATES else US_STATE_TAX_RATES,
+            onSelect = { code ->
+                vm.onAction(CalculatorAction.SetTaxState(code))
+                showTaxStatePicker = false
+            },
+            onDismiss = { showTaxStatePicker = false }
+        )
+    }
+    if (showTaxRateEditDialog) {
+        TaxRateEditDialog(
+            currentRate = state.currentTaxInfo?.standardRate ?: 0.0,
+            hasOverride = state.taxRateOverride != null,
+            onConfirm = { rate ->
+                vm.onAction(CalculatorAction.SetTaxRateOverride(rate))
+                showTaxRateEditDialog = false
+            },
+            onReset = {
+                vm.onAction(CalculatorAction.SetTaxRateOverride(null))
+                showTaxRateEditDialog = false
+            },
+            onDismiss = { showTaxRateEditDialog = false }
         )
     }
 
@@ -483,6 +527,129 @@ fun SettingsScreen(vm: CalculatorViewModel, modifier: Modifier = Modifier) {
 
         }
 
+        Spacer(Modifier.height(24.dp))
+        Text("TAX", fontSize = 12.sp, color = colors.textSecondary, fontWeight = FontWeight.Medium, modifier = Modifier.padding(bottom = 8.dp))
+        Card(modifier = Modifier.fillMaxWidth(), colors = CardDefaults.cardColors(containerColor = colors.surface)) {
+            Column(modifier = Modifier.padding(vertical = 4.dp)) {
+                Row(
+                    modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 12.dp),
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.SpaceBetween
+                ) {
+                    Column(modifier = Modifier.weight(1f)) {
+                        Text("Show tax options", color = colors.textPrimary, fontSize = 15.sp)
+                        Text("Adds tax info to the Tip calculator", color = colors.textSecondary, fontSize = 12.sp)
+                    }
+                    Switch(
+                        checked = state.taxEnabled,
+                        onCheckedChange = { vm.onAction(CalculatorAction.SetTaxEnabled(it)) },
+                        colors = SwitchDefaults.colors(checkedTrackColor = colors.positiveColor)
+                    )
+                }
+                if (state.taxEnabled) {
+                    HorizontalDivider(modifier = Modifier.padding(horizontal = 16.dp), color = colors.divider)
+                    Row(
+                        modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 12.dp),
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.SpaceBetween
+                    ) {
+                        Column(modifier = Modifier.weight(1f)) {
+                            Text("Country", color = colors.textPrimary, fontSize = 15.sp)
+                            Text("Your current location", color = colors.textSecondary, fontSize = 12.sp)
+                        }
+                        OutlinedButton(onClick = { showTaxCountryPicker = true }) {
+                            val countryCode = state.taxCountryCode
+                            Text(
+                                when (countryCode) {
+                                    null -> "Select…"
+                                    "US" -> "United States"
+                                    "CA" -> "Canada"
+                                    else -> EU_VAT_RATES[countryCode]?.first ?: countryCode
+                                },
+                                fontSize = 13.sp
+                            )
+                        }
+                    }
+                    if (state.taxCountryCode == "US") {
+                        HorizontalDivider(modifier = Modifier.padding(horizontal = 16.dp), color = colors.divider)
+                        Row(
+                            modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 12.dp),
+                            verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.SpaceBetween
+                        ) {
+                            Column(modifier = Modifier.weight(1f)) {
+                                Text("State", color = colors.textPrimary, fontSize = 15.sp)
+                                Text("US state sales tax rate", color = colors.textSecondary, fontSize = 12.sp)
+                            }
+                            OutlinedButton(onClick = { showTaxStatePicker = true }) {
+                                val stateCode = state.taxStateCode
+                                Text(
+                                    if (stateCode == null) "Select…"
+                                    else US_STATE_TAX_RATES[stateCode]?.first ?: stateCode,
+                                    fontSize = 13.sp
+                                )
+                            }
+                        }
+                    }
+                    if (state.taxCountryCode == "CA") {
+                        HorizontalDivider(modifier = Modifier.padding(horizontal = 16.dp), color = colors.divider)
+                        Row(
+                            modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 12.dp),
+                            verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.SpaceBetween
+                        ) {
+                            Column(modifier = Modifier.weight(1f)) {
+                                Text("Province", color = colors.textPrimary, fontSize = 15.sp)
+                                Text("Canadian province tax rate", color = colors.textSecondary, fontSize = 12.sp)
+                            }
+                            OutlinedButton(onClick = { showTaxStatePicker = true }) {
+                                val provinceCode = state.taxStateCode
+                                Text(
+                                    if (provinceCode == null) "Select…"
+                                    else CANADA_PROVINCE_TAX_RATES[provinceCode]?.first ?: provinceCode,
+                                    fontSize = 13.sp
+                                )
+                            }
+                        }
+                    }
+                    if (state.currentTaxInfo != null) {
+                        val info = state.currentTaxInfo!!
+                        HorizontalDivider(modifier = Modifier.padding(horizontal = 16.dp), color = colors.divider)
+                        Column(modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 12.dp)) {
+                            val rateStr = if (info.standardRate == info.standardRate.toLong().toDouble())
+                                "${info.standardRate.toLong()}%" else "${"%.1f".format(info.standardRate)}%"
+                            val styleStr = if (info.includedInPrice) "included in price" else "added at checkout"
+                            Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.fillMaxWidth()) {
+                                Text("$rateStr — $styleStr", color = colors.positiveColor, fontSize = 13.sp, modifier = Modifier.weight(1f))
+                                if (state.taxRateOverride != null) {
+                                    Text("custom", color = colors.operator, fontSize = 11.sp)
+                                }
+                            }
+                            Spacer(Modifier.height(8.dp))
+                            Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                                OutlinedButton(
+                                    onClick = { showTaxRateEditDialog = true },
+                                    modifier = Modifier.weight(1f)
+                                ) {
+                                    Icon(Icons.Default.Edit, contentDescription = null, modifier = Modifier.size(14.dp))
+                                    Spacer(Modifier.width(4.dp))
+                                    Text("Edit rate", fontSize = 13.sp)
+                                }
+                                if (state.taxRateOverride != null) {
+                                    OutlinedButton(
+                                        onClick = { vm.onAction(CalculatorAction.SetTaxRateOverride(null)) },
+                                        modifier = Modifier.weight(1f)
+                                    ) {
+                                        Text("Reset to default", fontSize = 13.sp)
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        }
+
     }
 }
 
@@ -816,4 +983,160 @@ private fun CurrencyDropdown(
             }
         }
     }
+}
+
+@Composable
+internal fun TaxCountryPickerDialog(
+    onSelect: (String) -> Unit,
+    onDismiss: () -> Unit
+) {
+    val colors = LocalAppColors.current
+    val countries = listOf(
+        Triple("US", "United States", "Sales tax — added at checkout, varies by state"),
+        Triple("CA", "Canada", "Sales tax — added at checkout, varies by province"),
+        Triple("JP", "Japan", "10% consumption tax — added at checkout in some situations"),
+    )
+    Dialog(onDismissRequest = onDismiss) {
+        Surface(shape = RoundedCornerShape(16.dp), color = colors.surface) {
+            Column(modifier = Modifier.padding(16.dp)) {
+                Text("Select country", color = colors.textPrimary, fontSize = 16.sp, fontWeight = FontWeight.SemiBold)
+                Spacer(Modifier.height(8.dp))
+                countries.forEach { (code, name, subtitle) ->
+                    Row(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .clickable { onSelect(code) }
+                            .padding(vertical = 12.dp, horizontal = 4.dp),
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Column(modifier = Modifier.weight(1f)) {
+                            Text(name, color = colors.textPrimary, fontSize = 14.sp)
+                            Text(subtitle, color = colors.textMuted, fontSize = 12.sp)
+                        }
+                        Text(code, color = colors.textSecondary, fontSize = 12.sp)
+                    }
+                    HorizontalDivider(color = colors.divider)
+                }
+            }
+        }
+    }
+}
+
+@Composable
+internal fun TaxRegionPickerDialog(
+    title: String,
+    entries: Map<String, Pair<String, Double>>,
+    onSelect: (String) -> Unit,
+    onDismiss: () -> Unit
+) {
+    val colors = LocalAppColors.current
+    var query by remember { mutableStateOf("") }
+    val allEntries = remember(entries) {
+        entries.entries.map { (code, pair) -> code to pair }.sortedBy { it.second.first }
+    }
+    Dialog(onDismissRequest = onDismiss) {
+        Surface(shape = RoundedCornerShape(16.dp), color = colors.surface, modifier = Modifier.fillMaxHeight(0.85f)) {
+            Column(modifier = Modifier.padding(16.dp)) {
+                Text(title, color = colors.textPrimary, fontSize = 16.sp, fontWeight = FontWeight.SemiBold)
+                Spacer(Modifier.height(8.dp))
+                OutlinedTextField(
+                    value = query,
+                    onValueChange = { query = it },
+                    placeholder = { Text("Search…", color = colors.textMuted) },
+                    modifier = Modifier.fillMaxWidth(),
+                    singleLine = true,
+                    colors = OutlinedTextFieldDefaults.colors(
+                        focusedBorderColor = colors.equals,
+                        unfocusedBorderColor = colors.divider,
+                        cursorColor = colors.equals,
+                        focusedTextColor = colors.textPrimary,
+                        unfocusedTextColor = colors.textPrimary
+                    )
+                )
+                Spacer(Modifier.height(8.dp))
+                LazyColumn {
+                    items(allEntries.filter { (code, pair) ->
+                        query.isBlank() || pair.first.contains(query, ignoreCase = true) || code.contains(query, ignoreCase = true)
+                    }) { (code, pair) ->
+                        val (name, rate) = pair
+                        val rateStr = if (rate == 0.0) "No sales tax"
+                            else if (rate == rate.toLong().toDouble()) "${rate.toLong()}%"
+                            else "${"%.3f".format(rate).trimEnd('0').trimEnd('.')}%"
+                        Row(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .clickable { onSelect(code) }
+                                .padding(vertical = 10.dp, horizontal = 4.dp),
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            Column(modifier = Modifier.weight(1f)) {
+                                Text(name, color = colors.textPrimary, fontSize = 14.sp)
+                                Text(rateStr, color = colors.textMuted, fontSize = 12.sp)
+                            }
+                            Text(code, color = colors.textSecondary, fontSize = 12.sp)
+                        }
+                        HorizontalDivider(color = colors.divider)
+                    }
+                }
+            }
+        }
+    }
+}
+
+@Composable
+internal fun TaxRateEditDialog(
+    currentRate: Double,
+    hasOverride: Boolean,
+    onConfirm: (Double) -> Unit,
+    onReset: () -> Unit,
+    onDismiss: () -> Unit
+) {
+    val colors = LocalAppColors.current
+    var input by remember(currentRate) {
+        mutableStateOf(
+            if (currentRate == currentRate.toLong().toDouble()) currentRate.toLong().toString()
+            else "%.2f".format(currentRate)
+        )
+    }
+    val value = input.toDoubleOrNull()
+    val valid = value != null && value >= 0 && value <= 100
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        title = { Text("Edit tax rate", color = colors.textPrimary) },
+        text = {
+            Column {
+                Text("Enter the tax rate for your current location:", color = colors.textSecondary, fontSize = 13.sp)
+                Spacer(Modifier.height(8.dp))
+                OutlinedTextField(
+                    value = input,
+                    onValueChange = { input = it },
+                    suffix = { Text("%", color = colors.textSecondary) },
+                    singleLine = true,
+                    keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal),
+                    isError = input.isNotBlank() && !valid,
+                    colors = OutlinedTextFieldDefaults.colors(
+                        focusedBorderColor = colors.equals,
+                        unfocusedBorderColor = colors.divider,
+                        cursorColor = colors.equals,
+                        focusedTextColor = colors.textPrimary,
+                        unfocusedTextColor = colors.textPrimary
+                    )
+                )
+            }
+        },
+        confirmButton = {
+            TextButton(onClick = { if (valid) onConfirm(value!!) }, enabled = valid) {
+                Text("Set", color = if (valid) colors.fromAmountColor else colors.textMuted)
+            }
+        },
+        dismissButton = {
+            Row {
+                if (hasOverride) {
+                    TextButton(onClick = onReset) { Text("Reset", color = colors.warningColor) }
+                }
+                TextButton(onClick = onDismiss) { Text("Cancel", color = colors.textSecondary) }
+            }
+        },
+        containerColor = colors.surface
+    )
 }

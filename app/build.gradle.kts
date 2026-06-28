@@ -33,6 +33,11 @@ android {
     }
 
     buildTypes {
+        debug {
+            applicationIdSuffix = ".debug"
+            versionNameSuffix = "-debug"
+            resValue("string", "app_name", "TripCalc (debug)")
+        }
         release {
             isMinifyEnabled = true
             isShrinkResources = true

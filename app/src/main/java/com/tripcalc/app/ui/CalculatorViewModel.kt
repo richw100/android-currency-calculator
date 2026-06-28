@@ -3,7 +3,10 @@ package com.tripcalc.app.ui
 import android.app.Application
 import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
+import com.tripcalc.app.data.CANADA_PROVINCE_TAX_RATES
+import com.tripcalc.app.data.EU_VAT_RATES
 import com.tripcalc.app.data.ExchangeRateRepository
+import com.tripcalc.app.data.US_STATE_TAX_RATES
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
@@ -18,7 +21,7 @@ enum class ConversionMode(val tabLabel: String, val settingsLabel: String) {
     CURRENCY("💱 FX",    "Currency (always on)"),
     DISTANCE("📏 Dist",  "Distance converter"),
     TEMPERATURE("🌡 Temp", "Temperature converter"),
-    TIP("🍽 Tip",        "Tip & bill splitter"),
+    TIP("🧾 Bill",       "Tip & bill splitter"),
     FUEL("⛽ mpg",       "Fuel economy")
 }
 
@@ -114,6 +117,50 @@ internal val MENS_CLOTHING_TABLE: List<Map<String, String>> = listOf(
 fun lookupSize(table: List<Map<String, String>>, fromKey: String, toKey: String, fromValue: String): String? =
     table.find { it[fromKey] == fromValue }?.get(toKey)
 
+data class TaxRateInfo(
+    val countryCode: String,
+    val countryName: String,
+    val standardRate: Double,
+    val reducedRates: List<Double>,
+    val includedInPrice: Boolean,
+    val stateCode: String? = null,
+    val stateName: String? = null
+)
+
+data class TipBreakdown(
+    val bill: Double,
+    val taxAmount: Double,
+    val tipBase: Double,
+    val tipAmount: Double,
+    val total: Double,
+    val perPerson: Double?,
+    val taxIncludedStyle: Boolean
+)
+
+fun computeTipBreakdown(
+    bill: Double, tipPercent: Double, people: Int,
+    taxInfo: TaxRateInfo?, taxApplied: Boolean, tipAfterTax: Boolean, noTip: Boolean
+): TipBreakdown {
+    val effectiveTipPct = if (noTip) 0.0 else tipPercent
+    if (taxInfo == null || !taxApplied || bill == 0.0) {
+        val tip = bill * effectiveTipPct / 100.0
+        return TipBreakdown(bill, 0.0, bill, tip, bill + tip,
+            if (people > 1) (bill + tip) / people else null, false)
+    }
+    val rate = taxInfo.standardRate
+    return if (!taxInfo.includedInPrice) {
+        val tax = bill * rate / 100.0
+        val tipBase = if (tipAfterTax) bill + tax else bill
+        val tip = tipBase * effectiveTipPct / 100.0
+        val total = bill + tax + tip
+        TipBreakdown(bill, tax, tipBase, tip, total, if (people > 1) total / people else null, false)
+    } else {
+        val vatContent = bill * rate / (100.0 + rate)
+        val tip = bill * effectiveTipPct / 100.0
+        val total = bill + tip
+        TipBreakdown(bill, vatContent, bill, tip, total, if (people > 1) total / people else null, true)
+    }
+}
 
 data class CardProfile(
     val id: String,
@@ -190,7 +237,16 @@ data class CalculatorUiState(
     val mensFromCountry: String = "US/UK",
     val mensToCountry: String = "EU",
     val exchangeRate: Double? = null,
-    val ocrConvertEnabled: Boolean = true
+    val ocrConvertEnabled: Boolean = true,
+    val taxEnabled: Boolean = false,
+    val taxCountryCode: String? = null,
+    val taxStateCode: String? = null,
+    val taxRateOverride: Double? = null,
+    val currentTaxInfo: TaxRateInfo? = null,
+    val taxApplied: Boolean = true,
+    val tipAfterTax: Boolean = false,
+    val noTip: Boolean = false,
+    val tipPresets: List<Double> = listOf(10.0, 15.0, 20.0)
 )
 
 sealed class CalculatorAction {
@@ -246,6 +302,14 @@ sealed class CalculatorAction {
     data class SetMensCountries(val from: String, val to: String) : CalculatorAction()
     object DismissHelpHint : CalculatorAction()
     data class SetOcrConvertEnabled(val enabled: Boolean) : CalculatorAction()
+    data class SetTaxEnabled(val enabled: Boolean) : CalculatorAction()
+    data class SetTaxCountry(val countryCode: String) : CalculatorAction()
+    data class SetTaxState(val stateCode: String) : CalculatorAction()
+    data class SetTaxRateOverride(val rate: Double?) : CalculatorAction()
+    data class SetTaxApplied(val applied: Boolean) : CalculatorAction()
+    data class SetTipAfterTax(val afterTax: Boolean) : CalculatorAction()
+    data class SetNoTip(val noTip: Boolean) : CalculatorAction()
+    data class SetTipPreset(val index: Int, val percent: Double) : CalculatorAction()
 }
 
 private data class BracketState(val firstOperand: Double?, val pendingOp: Char?)
@@ -295,8 +359,46 @@ class CalculatorViewModel(application: Application) : AndroidViewModel(applicati
             val (mensFrom, mensTo) = repository.loadMensCountries()
             val helpHintSeen = repository.loadHelpHintSeen()
             val ocrConvertEnabled = repository.loadOcrConvertEnabled()
-            _uiState.update { it.copy(toCurrency = to, fromCurrency = from, recentCurrencies = recents, customRates = customRates, hapticEnabled = hapticEnabled, history = history, darkModePref = darkModePref, accentScheme = accentScheme, defaultTipPercent = defaultTipPercent, tipPercent = defaultTipPercent, customTipPercent = customTipPercent, fuelUseUkGallons = fuelUseUkGallons, swapZeroDot = swapZeroDot, enabledModes = enabledModes, enabledDistancePairs = enabledDistancePairs, cardProfiles = cardProfiles, activeCardId = activeCardId, sizeCategory = sizeCategory, shoeIsMens = shoeIsMens, shoeFromCountry = shoeFrom, shoeToCountry = shoeTo, womensFromCountry = womensFrom, womensToCountry = womensTo, mensFromCountry = mensFrom, mensToCountry = mensTo, helpHintSeen = helpHintSeen, ocrConvertEnabled = ocrConvertEnabled) }
+            val taxEnabled = repository.loadTaxEnabled()
+            val taxCountryCode = repository.loadTaxCountryCode()
+            val taxStateCode = repository.loadTaxStateCode()
+            val taxRateOverride = repository.loadTaxRateOverride()
+            val taxApplied = repository.loadTaxApplied()
+            val tipAfterTax = repository.loadTipAfterTax()
+            val noTip = repository.loadNoTip()
+            val tipPresets = repository.loadTipPresets()
+            _uiState.update { it.copy(toCurrency = to, fromCurrency = from, recentCurrencies = recents, customRates = customRates, hapticEnabled = hapticEnabled, history = history, darkModePref = darkModePref, accentScheme = accentScheme, defaultTipPercent = defaultTipPercent, tipPercent = defaultTipPercent, customTipPercent = customTipPercent, fuelUseUkGallons = fuelUseUkGallons, swapZeroDot = swapZeroDot, enabledModes = enabledModes, enabledDistancePairs = enabledDistancePairs, cardProfiles = cardProfiles, activeCardId = activeCardId, sizeCategory = sizeCategory, shoeIsMens = shoeIsMens, shoeFromCountry = shoeFrom, shoeToCountry = shoeTo, womensFromCountry = womensFrom, womensToCountry = womensTo, mensFromCountry = mensFrom, mensToCountry = mensTo, helpHintSeen = helpHintSeen, ocrConvertEnabled = ocrConvertEnabled, taxEnabled = taxEnabled, taxCountryCode = taxCountryCode, taxStateCode = taxStateCode, taxRateOverride = taxRateOverride, taxApplied = taxApplied, tipAfterTax = tipAfterTax, noTip = noTip, tipPresets = tipPresets) }
+            refreshCurrentTaxInfo()
             fetchRates(forceRefresh = false)
+        }
+    }
+
+    private fun refreshCurrentTaxInfo() {
+        val s = _uiState.value
+        val info = resolveTaxInfo(s.taxCountryCode, s.taxStateCode, s.taxRateOverride)
+        _uiState.update { it.copy(currentTaxInfo = info) }
+    }
+
+    private fun resolveTaxInfo(countryCode: String?, stateCode: String?, override: Double?): TaxRateInfo? {
+        if (countryCode == null) return null
+        return when (countryCode) {
+            "US" -> {
+                if (stateCode == null) return null
+                val (stateName, bundledRate) = US_STATE_TAX_RATES[stateCode] ?: return null
+                val rate = override ?: bundledRate
+                TaxRateInfo("US", "United States", rate, emptyList(), false, stateCode, stateName)
+            }
+            "CA" -> {
+                if (stateCode == null) return null
+                val (provinceName, bundledRate) = CANADA_PROVINCE_TAX_RATES[stateCode] ?: return null
+                val rate = override ?: bundledRate
+                TaxRateInfo("CA", "Canada", rate, emptyList(), false, stateCode, provinceName)
+            }
+            else -> {
+                val (countryName, bundledRate, reduced) = EU_VAT_RATES[countryCode] ?: return null
+                val rate = override ?: bundledRate
+                TaxRateInfo(countryCode, countryName, rate, reduced, false)
+            }
         }
     }
 
@@ -585,6 +687,60 @@ class CalculatorViewModel(application: Application) : AndroidViewModel(applicati
                 viewModelScope.launch { repository.saveOcrConvertEnabled(action.enabled) }
                 return
             }
+            is CalculatorAction.SetTaxEnabled -> {
+                _uiState.update { it.copy(taxEnabled = action.enabled) }
+                viewModelScope.launch { repository.saveTaxEnabled(action.enabled) }
+                refreshCurrentTaxInfo()
+                return
+            }
+            is CalculatorAction.SetTaxCountry -> {
+                _uiState.update { it.copy(taxCountryCode = action.countryCode, taxStateCode = null, taxRateOverride = null, currentTaxInfo = null) }
+                viewModelScope.launch {
+                    repository.saveTaxCountryCode(action.countryCode)
+                    repository.saveTaxStateCode(null)
+                    repository.saveTaxRateOverride(null)
+                }
+                refreshCurrentTaxInfo()
+                return
+            }
+            is CalculatorAction.SetTaxState -> {
+                _uiState.update { it.copy(taxStateCode = action.stateCode, taxRateOverride = null) }
+                viewModelScope.launch {
+                    repository.saveTaxStateCode(action.stateCode)
+                    repository.saveTaxRateOverride(null)
+                }
+                refreshCurrentTaxInfo()
+                return
+            }
+            is CalculatorAction.SetTaxRateOverride -> {
+                _uiState.update { it.copy(taxRateOverride = action.rate) }
+                viewModelScope.launch { repository.saveTaxRateOverride(action.rate) }
+                refreshCurrentTaxInfo()
+                return
+            }
+            is CalculatorAction.SetTaxApplied -> {
+                _uiState.update { it.copy(taxApplied = action.applied) }
+                viewModelScope.launch { repository.saveTaxApplied(action.applied) }
+                updateDisplay(); return
+            }
+            is CalculatorAction.SetTipAfterTax -> {
+                _uiState.update { it.copy(tipAfterTax = action.afterTax) }
+                viewModelScope.launch { repository.saveTipAfterTax(action.afterTax) }
+                updateDisplay(); return
+            }
+            is CalculatorAction.SetNoTip -> {
+                _uiState.update { it.copy(noTip = action.noTip) }
+                viewModelScope.launch { repository.saveNoTip(action.noTip) }
+                updateDisplay(); return
+            }
+            is CalculatorAction.SetTipPreset -> {
+                val current = _uiState.value
+                val updated = current.tipPresets.toMutableList().also { it[action.index] = action.percent }
+                val newTipPercent = if (current.tipPercent == current.tipPresets[action.index]) action.percent else current.tipPercent
+                _uiState.update { it.copy(tipPresets = updated, tipPercent = newTipPercent) }
+                viewModelScope.launch { repository.saveTipPreset(action.index, action.percent) }
+                updateDisplay(); return
+            }
             is CalculatorAction.DeleteHistoryEntry -> {
                 val updated = _uiState.value.history.filter { it.timestamp != action.timestamp }
                 _uiState.update { it.copy(history = updated) }
@@ -603,8 +759,11 @@ class CalculatorViewModel(application: Application) : AndroidViewModel(applicati
                 val s = _uiState.value
                 tipSavedBill = currentInput
                 val bill = currentInput.toDoubleOrNull() ?: 0.0
-                val total = bill * (1.0 + s.tipPercent / 100.0)
-                val amount = if (s.tipPeopleCount > 1) total / s.tipPeopleCount else total
+                val bd = computeTipBreakdown(
+                    bill, s.tipPercent, s.tipPeopleCount,
+                    s.currentTaxInfo, s.taxApplied, s.tipAfterTax, s.noTip
+                )
+                val amount = bd.perPerson ?: bd.total
                 currentInput = formatResult(amount)
                 firstOperand = null; pendingOp = null
                 bracketStack.clear(); expressionDisplay.clear()
@@ -996,14 +1155,16 @@ class CalculatorViewModel(application: Application) : AndroidViewModel(applicati
     private fun updateTipDisplay() {
         val bill = currentInput.toDoubleOrNull() ?: 0.0
         val state = _uiState.value
-        val tipAmount = bill * state.tipPercent / 100.0
-        val total = bill + tipAmount
+        val bd = computeTipBreakdown(
+            bill, state.tipPercent, state.tipPeopleCount,
+            state.currentTaxInfo, state.taxApplied, state.tipAfterTax, state.noTip
+        )
         val pctLabel = if (state.tipPercent == state.tipPercent.toLong().toDouble())
             state.tipPercent.toLong().toString() else "%.1f".format(state.tipPercent)
         _uiState.update {
             it.copy(
-                fromAmount = "Tip ${"%.2f".format(tipAmount)}",
-                toAmount = "Total ${"%.2f".format(total)}",
+                fromAmount = "Tip ${"%.2f".format(bd.tipAmount)}",
+                toAmount = "Total ${"%.2f".format(bd.total)}",
                 exchangeRateLabel = "$pctLabel% tip · ${state.tipPeopleCount} ${if (state.tipPeopleCount == 1) "person" else "people"}",
                 customRatePctDiff = null
             )

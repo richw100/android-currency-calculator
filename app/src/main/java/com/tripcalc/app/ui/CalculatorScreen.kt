@@ -42,6 +42,7 @@ import androidx.compose.material.icons.filled.Refresh
 import androidx.compose.material.icons.filled.Settings
 import androidx.compose.material.icons.filled.SwapHoriz
 import androidx.compose.material.icons.filled.Checkroom
+import androidx.compose.material.icons.filled.Edit
 import androidx.compose.material.icons.filled.WifiOff
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
@@ -90,6 +91,8 @@ import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.viewmodel.compose.viewModel
 import com.tripcalc.app.BuildConfig
 import com.tripcalc.app.R
+import com.tripcalc.app.data.CANADA_PROVINCE_TAX_RATES
+import com.tripcalc.app.data.US_STATE_TAX_RATES
 import com.tripcalc.app.ui.theme.CalcAppTheme
 
 fun currencyFlag(code: String): String {
@@ -729,11 +732,25 @@ fun CalculatorScreen(vm: CalculatorViewModel = viewModel(), modifier: Modifier =
         )
         ConversionMode.TIP -> TipControlsRow(
             tipPercent = state.tipPercent,
-            customTipPercent = state.customTipPercent,
+            tipPresets = state.tipPresets,
             people = state.tipPeopleCount,
+            taxEnabled = state.taxEnabled,
+            taxInfo = state.currentTaxInfo,
+            taxCountryCode = state.taxCountryCode,
+            taxStateCode = state.taxStateCode,
+            taxRateOverride = state.taxRateOverride,
+            taxApplied = state.taxApplied,
+            tipAfterTax = state.tipAfterTax,
+            noTip = state.noTip,
             onSetPercent = { vm.onAction(CalculatorAction.SetTipPercent(it)) },
-            onSetCustomPercent = { vm.onAction(CalculatorAction.SetCustomTipPercent(it)) },
-            onSetPeople = { vm.onAction(CalculatorAction.SetTipPeople(it)) }
+            onSetPreset = { i, v -> vm.onAction(CalculatorAction.SetTipPreset(i, v)) },
+            onSetPeople = { vm.onAction(CalculatorAction.SetTipPeople(it)) },
+            onSetTaxApplied = { vm.onAction(CalculatorAction.SetTaxApplied(it)) },
+            onSetTipAfterTax = { vm.onAction(CalculatorAction.SetTipAfterTax(it)) },
+            onSetNoTip = { vm.onAction(CalculatorAction.SetNoTip(it)) },
+            onSetTaxCountry = { vm.onAction(CalculatorAction.SetTaxCountry(it)) },
+            onSetTaxState = { vm.onAction(CalculatorAction.SetTaxState(it)) },
+            onSetTaxRateOverride = { vm.onAction(CalculatorAction.SetTaxRateOverride(it)) }
         )
         ConversionMode.FUEL -> FuelConversionRow(
             inputIsMpg = state.fuelInputIsMpg,
@@ -751,6 +768,10 @@ fun CalculatorScreen(vm: CalculatorViewModel = viewModel(), modifier: Modifier =
                     bill = state.display.toDoubleOrNull() ?: 0.0,
                     tipPercent = state.tipPercent,
                     people = state.tipPeopleCount,
+                    taxInfo = state.currentTaxInfo,
+                    taxApplied = state.taxApplied,
+                    tipAfterTax = state.tipAfterTax,
+                    noTip = state.noTip,
                     onConvertToFX = { vm.onAction(CalculatorAction.SendTipShareToFX) }
                 )
             } else {
@@ -1082,26 +1103,82 @@ private fun TempConversionRow(unit: TempUnit, rateLabel: String, onSwap: () -> U
 
 // ── Tip controls row ──────────────────────────────────────────────────────────
 
-@OptIn(ExperimentalMaterial3Api::class)
+@OptIn(ExperimentalMaterial3Api::class, ExperimentalFoundationApi::class)
 @Composable
 private fun TipControlsRow(
     tipPercent: Double,
-    customTipPercent: Double,
+    tipPresets: List<Double>,
     people: Int,
+    taxEnabled: Boolean,
+    taxInfo: TaxRateInfo?,
+    taxCountryCode: String?,
+    taxStateCode: String?,
+    taxRateOverride: Double?,
+    taxApplied: Boolean,
+    tipAfterTax: Boolean,
+    noTip: Boolean,
     onSetPercent: (Double) -> Unit,
-    onSetCustomPercent: (Double) -> Unit,
-    onSetPeople: (Int) -> Unit
+    onSetPreset: (Int, Double) -> Unit,
+    onSetPeople: (Int) -> Unit,
+    onSetTaxApplied: (Boolean) -> Unit,
+    onSetTipAfterTax: (Boolean) -> Unit,
+    onSetNoTip: (Boolean) -> Unit,
+    onSetTaxCountry: (String) -> Unit,
+    onSetTaxState: (String) -> Unit,
+    onSetTaxRateOverride: (Double?) -> Unit
 ) {
     val colors = LocalAppColors.current
     val scope = rememberCoroutineScope()
-    val tooltipState = rememberTooltipState()
-    var showCustomDialog by remember { mutableStateOf(false) }
+    val tipTooltipState = rememberTooltipState()
+    val taxTooltipState = rememberTooltipState()
+    var presetEditIndex by remember { mutableStateOf<Int?>(null) }
+    var showCountryPicker by remember { mutableStateOf(false) }
+    var showStatePicker by remember { mutableStateOf(false) }
+    var showRateEditDialog by remember { mutableStateOf(false) }
+    var showTaxSettingsDialog by remember { mutableStateOf(false) }
 
-    if (showCustomDialog) {
-        CustomTipPercentDialog(
-            current = customTipPercent,
-            onSave = { onSetCustomPercent(it); showCustomDialog = false },
-            onDismiss = { showCustomDialog = false }
+    if (presetEditIndex != null) {
+        EditPresetDialog(
+            current = tipPresets[presetEditIndex!!],
+            onSave = { v -> onSetPreset(presetEditIndex!!, v); presetEditIndex = null },
+            onDismiss = { presetEditIndex = null }
+        )
+    }
+    if (showTaxSettingsDialog) {
+        TaxSettingsDialog(
+            taxInfo = taxInfo,
+            taxRateOverride = taxRateOverride,
+            onChangeLocation = { showTaxSettingsDialog = false; showCountryPicker = true },
+            onEditRate = { showTaxSettingsDialog = false; showRateEditDialog = true },
+            onResetRate = { onSetTaxRateOverride(null); showTaxSettingsDialog = false },
+            onDismiss = { showTaxSettingsDialog = false }
+        )
+    }
+    if (showCountryPicker) {
+        TaxCountryPickerDialog(
+            onSelect = { code ->
+                onSetTaxCountry(code)
+                showCountryPicker = false
+                if (code == "US" || code == "CA") showStatePicker = true
+            },
+            onDismiss = { showCountryPicker = false }
+        )
+    }
+    if (showStatePicker) {
+        TaxRegionPickerDialog(
+            title = if (taxCountryCode == "CA") "Select province" else "Select state",
+            entries = if (taxCountryCode == "CA") CANADA_PROVINCE_TAX_RATES else US_STATE_TAX_RATES,
+            onSelect = { code -> onSetTaxState(code); showStatePicker = false },
+            onDismiss = { showStatePicker = false }
+        )
+    }
+    if (showRateEditDialog) {
+        TaxRateEditDialog(
+            currentRate = taxInfo?.standardRate ?: 0.0,
+            hasOverride = taxRateOverride != null,
+            onConfirm = { rate -> onSetTaxRateOverride(rate); showRateEditDialog = false },
+            onReset = { onSetTaxRateOverride(null); showRateEditDialog = false },
+            onDismiss = { showRateEditDialog = false }
         )
     }
 
@@ -1109,8 +1186,8 @@ private fun TipControlsRow(
         selectedContainerColor = colors.operator,
         selectedLabelColor = colors.operatorContent
     )
-    val customLabel = if (customTipPercent == customTipPercent.toLong().toDouble())
-        "${customTipPercent.toLong()}%" else "${"%.1f".format(customTipPercent)}%"
+
+    fun formatPct(d: Double) = if (d == d.toLong().toDouble()) "${d.toLong()}%" else "${"%.1f".format(d)}%"
 
     Column(
         modifier = Modifier
@@ -1118,40 +1195,129 @@ private fun TipControlsRow(
             .padding(start = 12.dp, end = 12.dp, top = 0.dp, bottom = 4.dp),
         verticalArrangement = Arrangement.spacedBy(0.dp)
     ) {
+        // Row 1: No Tip + 3 preset chips (long-press to edit)
         Row(
             modifier = Modifier.fillMaxWidth(),
-            horizontalArrangement = Arrangement.spacedBy(8.dp),
+            horizontalArrangement = Arrangement.spacedBy(4.dp),
             verticalAlignment = Alignment.CenterVertically
         ) {
             TooltipBox(
                 positionProvider = TooltipDefaults.rememberPlainTooltipPositionProvider(),
-                tooltip = { PlainTooltip { Text("The last option is your custom tip %. Tap to select it, tap again to change the value. You can also set it in Settings.") } },
-                state = tooltipState
+                tooltip = { PlainTooltip { Text("Press and hold a % chip to customise its value.") } },
+                state = tipTooltipState
             ) {
-                IconButton(onClick = { scope.launch { tooltipState.show() } }) {
-                    Icon(Icons.Default.Info, contentDescription = "Custom tip info", tint = colors.textMuted, modifier = Modifier.size(18.dp))
+                IconButton(onClick = { scope.launch { tipTooltipState.show() } }) {
+                    Icon(Icons.Default.Info, contentDescription = "Tip info", tint = colors.textMuted, modifier = Modifier.size(18.dp))
                 }
             }
-            listOf(10.0, 15.0, 20.0).forEach { pct ->
-                FilterChip(
-                    selected = tipPercent == pct,
-                    onClick = { onSetPercent(pct) },
-                    label = { Text("${pct.toInt()}%", fontSize = 13.sp) },
-                    modifier = Modifier.weight(1f),
-                    colors = chipColors
-                )
-            }
+            // No Tip chip
             FilterChip(
-                selected = tipPercent == customTipPercent,
-                onClick = {
-                    if (tipPercent == customTipPercent) showCustomDialog = true
-                    else onSetPercent(customTipPercent)
-                },
-                label = { Text(customLabel, fontSize = 13.sp) },
+                selected = noTip,
+                onClick = { onSetNoTip(!noTip) },
+                label = { Text("No Tip", fontSize = 13.sp) },
                 modifier = Modifier.weight(1f),
-                colors = chipColors
+                colors = FilterChipDefaults.filterChipColors(
+                    containerColor = colors.buttonDigit,
+                    labelColor = colors.textSecondary,
+                    selectedContainerColor = colors.surface,
+                    selectedLabelColor = colors.textMuted
+                )
             )
+            // 3 preset chips: tap to select, long-press to edit
+            tipPresets.forEachIndexed { i, pct ->
+                Box(modifier = Modifier.weight(1f)) {
+                    FilterChip(
+                        selected = tipPercent == pct && !noTip,
+                        onClick = {},
+                        modifier = Modifier.fillMaxWidth(),
+                        label = { Text(formatPct(pct), fontSize = 13.sp) },
+                        colors = chipColors
+                    )
+                    Box(modifier = Modifier.matchParentSize().pointerInput(pct) {
+                        detectTapGestures(
+                            onTap = { onSetNoTip(false); onSetPercent(pct) },
+                            onLongPress = { presetEditIndex = i }
+                        )
+                    })
+                }
+            }
         }
+
+        // Row 2: Tax chip row (when tax enabled)
+        val taxRateStr = taxInfo?.standardRate?.let { r ->
+            if (r == r.toLong().toDouble()) "${r.toLong()}%" else "${"%.1f".format(r)}%"
+        } ?: ""
+        if (taxEnabled) {
+            if (taxInfo == null) {
+                Row(
+                    modifier = Modifier.fillMaxWidth().padding(top = 2.dp),
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Text("Tax: no location set", color = colors.textMuted, fontSize = 12.sp, modifier = Modifier.weight(1f))
+                    TextButton(
+                        onClick = { showCountryPicker = true },
+                        contentPadding = PaddingValues(horizontal = 4.dp, vertical = 0.dp)
+                    ) {
+                        Text("Set →", fontSize = 12.sp, color = colors.operator)
+                    }
+                }
+            } else {
+                Row(
+                    modifier = Modifier.fillMaxWidth().padding(top = 2.dp),
+                    horizontalArrangement = Arrangement.spacedBy(4.dp),
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    TooltipBox(
+                        positionProvider = TooltipDefaults.rememberPlainTooltipPositionProvider(),
+                        tooltip = { PlainTooltip { Text("Long press Tax to change location or edit the rate.") } },
+                        state = taxTooltipState
+                    ) {
+                        IconButton(onClick = { scope.launch { taxTooltipState.show() } }) {
+                            Icon(Icons.Default.Info, contentDescription = "Tax info", tint = colors.textMuted, modifier = Modifier.size(18.dp))
+                        }
+                    }
+                    // Tax chip: tap toggles, long-press opens settings dialog
+                    Box(modifier = Modifier.weight(1f)) {
+                        FilterChip(
+                            selected = taxApplied,
+                            onClick = {},
+                            modifier = Modifier.fillMaxWidth(),
+                            label = { Text("Tax $taxRateStr", fontSize = 11.sp, maxLines = 1) },
+                            colors = FilterChipDefaults.filterChipColors(
+                                selectedContainerColor = colors.positiveColor,
+                                selectedLabelColor = Color.White,
+                                labelColor = colors.textSecondary
+                            )
+                        )
+                        Box(modifier = Modifier.matchParentSize().pointerInput(taxApplied) {
+                            detectTapGestures(
+                                onTap = { onSetTaxApplied(!taxApplied) },
+                                onLongPress = { showTaxSettingsDialog = true }
+                            )
+                        })
+                    }
+                    // Pre/post-tax chips
+                    if (taxApplied && !noTip && !taxInfo.includedInPrice) {
+                        FilterChip(
+                            selected = !tipAfterTax,
+                            onClick = { onSetTipAfterTax(false) },
+                            label = { Text("Tip pre-tax", fontSize = 11.sp, maxLines = 1) },
+                            modifier = Modifier.weight(1f),
+                            colors = chipColors
+                        )
+                        FilterChip(
+                            selected = tipAfterTax,
+                            onClick = { onSetTipAfterTax(true) },
+                            label = { Text("Tip post-tax", fontSize = 11.sp, maxLines = 1) },
+                            modifier = Modifier.weight(1f),
+                            colors = chipColors
+                        )
+                    }
+                }
+            }
+        }
+
+        // Split row
         Row(
             modifier = Modifier.fillMaxWidth().padding(top = 2.dp),
             horizontalArrangement = Arrangement.spacedBy(8.dp),
@@ -1226,26 +1392,145 @@ private fun CustomTipPercentDialog(current: Double, onSave: (Double) -> Unit, on
     )
 }
 
+// ── Edit tip preset dialog ────────────────────────────────────────────────────
+
+@Composable
+private fun EditPresetDialog(current: Double, onSave: (Double) -> Unit, onDismiss: () -> Unit) {
+    val colors = LocalAppColors.current
+    var text by remember {
+        mutableStateOf(
+            if (current == current.toLong().toDouble()) current.toLong().toString()
+            else "%.1f".format(current)
+        )
+    }
+    val value = text.toDoubleOrNull()
+    val valid = value != null && value > 0 && value <= 100
+
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        containerColor = colors.surface,
+        title = { Text("Set tip %", color = colors.textPrimary) },
+        text = {
+            OutlinedTextField(
+                value = text,
+                onValueChange = { text = it },
+                suffix = { Text("%", color = colors.textSecondary) },
+                keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal),
+                singleLine = true,
+                modifier = Modifier.fillMaxWidth(),
+                colors = OutlinedTextFieldDefaults.colors(
+                    focusedTextColor = colors.textPrimary,
+                    unfocusedTextColor = colors.textPrimary
+                )
+            )
+        },
+        confirmButton = {
+            TextButton(onClick = { value?.let { onSave(it) } }, enabled = valid) {
+                Text("Set", color = colors.fromAmountColor)
+            }
+        },
+        dismissButton = {
+            TextButton(onClick = onDismiss) { Text("Cancel", color = colors.textSecondary) }
+        }
+    )
+}
+
+// ── Tax settings dialog (long-press Tax chip) ─────────────────────────────────
+
+@Composable
+private fun TaxSettingsDialog(
+    taxInfo: TaxRateInfo?,
+    taxRateOverride: Double?,
+    onChangeLocation: () -> Unit,
+    onEditRate: () -> Unit,
+    onResetRate: () -> Unit,
+    onDismiss: () -> Unit
+) {
+    val colors = LocalAppColors.current
+    val rateStr = taxInfo?.standardRate?.let { r ->
+        if (r == r.toLong().toDouble()) "${r.toLong()}%" else "${"%.3f".format(r).trimEnd('0').trimEnd('.')}%"
+    } ?: "—"
+    Dialog(onDismissRequest = onDismiss) {
+        Surface(shape = RoundedCornerShape(16.dp), color = colors.surface) {
+            Column(modifier = Modifier.padding(16.dp)) {
+                Text("Tax settings", fontWeight = FontWeight.SemiBold, fontSize = 16.sp, color = colors.textPrimary)
+                Spacer(Modifier.height(12.dp))
+                Text("Location", fontSize = 11.sp, color = colors.textMuted)
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Text(
+                        "📍 ${taxInfo?.stateName ?: taxInfo?.countryName ?: "Not set"}",
+                        modifier = Modifier.weight(1f),
+                        fontSize = 14.sp,
+                        color = colors.textPrimary
+                    )
+                    TextButton(onClick = onChangeLocation) { Text("Change →", color = colors.operator) }
+                }
+                HorizontalDivider(color = colors.divider)
+                Spacer(Modifier.height(8.dp))
+                Text("Rate", fontSize = 11.sp, color = colors.textMuted)
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Text(
+                        "$rateStr${if (taxRateOverride != null) " (custom)" else " (default)"}",
+                        modifier = Modifier.weight(1f),
+                        fontSize = 14.sp,
+                        color = colors.textPrimary
+                    )
+                    if (taxRateOverride != null) {
+                        TextButton(onClick = onResetRate) { Text("Reset", color = colors.textSecondary) }
+                    }
+                    TextButton(onClick = onEditRate) { Text("Edit →", color = colors.operator) }
+                }
+                Spacer(Modifier.height(4.dp))
+                Row(horizontalArrangement = Arrangement.End, modifier = Modifier.fillMaxWidth()) {
+                    TextButton(onClick = onDismiss) { Text("Done", color = colors.textSecondary) }
+                }
+            }
+        }
+    }
+}
+
 // ── Tip breakdown display ─────────────────────────────────────────────────────
 
 @Composable
-private fun TipBreakdownDisplay(bill: Double, tipPercent: Double, people: Int, onConvertToFX: (() -> Unit)? = null) {
+private fun TipBreakdownDisplay(
+    bill: Double,
+    tipPercent: Double,
+    people: Int,
+    taxInfo: TaxRateInfo? = null,
+    taxApplied: Boolean = false,
+    tipAfterTax: Boolean = false,
+    noTip: Boolean = false,
+    onConvertToFX: (() -> Unit)? = null
+) {
     val colors = LocalAppColors.current
-    val tipAmount = bill * tipPercent / 100.0
-    val total = bill + tipAmount
-    val perPerson = if (people > 1) total / people else null
+    val bd = computeTipBreakdown(bill, tipPercent, people, taxInfo, taxApplied, tipAfterTax, noTip)
     val pctLabel = if (tipPercent == tipPercent.toLong().toDouble())
         tipPercent.toLong().toString() else "%.1f".format(tipPercent)
     val shareText = buildString {
-        append("Tip ($pctLabel%): ${"%.2f".format(tipAmount)}\n")
-        append("Total: ${"%.2f".format(total)}")
-        if (perPerson != null) append("\nEach: ${"%.2f".format(perPerson)}")
+        if (taxInfo != null && taxApplied && bd.taxAmount > 0) {
+            val rate = taxInfo.standardRate
+            val rateStr = if (rate == rate.toLong().toDouble()) "${rate.toLong()}%" else "${"%.1f".format(rate)}%"
+            append("Tax ($rateStr ${if (bd.taxIncludedStyle) "incl." else "added"}): ${"%.2f".format(bd.taxAmount)}\n")
+        }
+        if (noTip) append("Service included\n") else append("Tip ($pctLabel%): ${"%.2f".format(bd.tipAmount)}\n")
+        append("Total: ${"%.2f".format(bd.total)}")
+        if (bd.perPerson != null) append("\nEach: ${"%.2f".format(bd.perPerson)}")
     }
     Column(
         modifier = Modifier.fillMaxWidth().padding(horizontal = 20.dp, vertical = 4.dp),
         horizontalAlignment = Alignment.End
     ) {
-        CopyableAmount(text = "Tip ($pctLabel%):  ${"%.2f".format(tipAmount)}", color = colors.textSecondary, shareText = shareText)
+        if (taxInfo != null && taxApplied && bd.taxAmount > 0) {
+            val rate = taxInfo.standardRate
+            val rateStr = if (rate == rate.toLong().toDouble()) "${rate.toLong()}%" else "${"%.1f".format(rate)}%"
+            val taxLabel = if (bd.taxIncludedStyle) "Tax ($rateStr incl.):" else "Tax ($rateStr):"
+            CopyableAmount(text = "$taxLabel  ${"%.2f".format(bd.taxAmount)}", color = colors.textMuted, shareText = shareText)
+        }
+        if (noTip) {
+            CopyableAmount(text = "Service included", color = colors.textMuted, shareText = shareText)
+        } else {
+            CopyableAmount(text = "Tip ($pctLabel%):  ${"%.2f".format(bd.tipAmount)}", color = colors.textSecondary, shareText = shareText)
+        }
         if (onConvertToFX != null && bill > 0) {
             Row(
                 modifier = Modifier.fillMaxWidth(),
@@ -1262,13 +1547,13 @@ private fun TipBreakdownDisplay(bill: Double, tipPercent: Double, people: Int, o
                         color = colors.operator
                     )
                 }
-                CopyableAmount(text = "Total:  ${"%.2f".format(total)}", color = colors.fromAmountColor, shareText = shareText)
+                CopyableAmount(text = "Total:  ${"%.2f".format(bd.total)}", color = colors.fromAmountColor, shareText = shareText)
             }
         } else {
-            CopyableAmount(text = "Total:  ${"%.2f".format(total)}", color = colors.fromAmountColor, shareText = shareText)
+            CopyableAmount(text = "Total:  ${"%.2f".format(bd.total)}", color = colors.fromAmountColor, shareText = shareText)
         }
-        if (perPerson != null) {
-            CopyableAmount(text = "Each:  ${"%.2f".format(perPerson)}", color = colors.toAmountColor, shareText = shareText)
+        if (bd.perPerson != null) {
+            CopyableAmount(text = "Each:  ${"%.2f".format(bd.perPerson)}", color = colors.toAmountColor, shareText = shareText)
         }
     }
 }
@@ -1977,6 +2262,8 @@ private fun OcrOverlayScreen(
     var panOffset by remember { mutableStateOf(Offset.Zero) }
     var detectedReceiptCurrency by remember { mutableStateOf<String?>(null) }
     val ocrConvertEnabled = uiState.ocrConvertEnabled
+    var ocrTaxApplied by remember { mutableStateOf(false) }
+    val ocrTaxInfo = uiState.currentTaxInfo.takeIf { uiState.taxEnabled }
 
     BackHandler { onClose() }
 
@@ -2284,8 +2571,11 @@ private fun OcrOverlayScreen(
 
         // Bottom bar — only shown when items are selected
         if (selectedItems.isNotEmpty()) {
-            val totalStr = if (selectedTotal == kotlin.math.floor(selectedTotal))
-                selectedTotal.toLong().toString() else "%.2f".format(selectedTotal)
+            val adjustedTotal = if (ocrTaxApplied && ocrTaxInfo != null && !ocrTaxInfo.includedInPrice) {
+                selectedTotal * (1.0 + ocrTaxInfo.standardRate / 100.0)
+            } else selectedTotal
+            val totalStr = if (adjustedTotal == kotlin.math.floor(adjustedTotal))
+                adjustedTotal.toLong().toString() else "%.2f".format(adjustedTotal)
             val showConversion = ocrConvertEnabled && exchangeRate != null
             val receiptSym = currencySymbol(detectedReceiptCurrency ?: fromCurrency)
             Column(
@@ -2294,15 +2584,51 @@ private fun OcrOverlayScreen(
                     .background(Color(0xEE000000))
                     .padding(horizontal = 16.dp, vertical = 10.dp)
             ) {
+                // Tax chip row
+                if (ocrTaxInfo != null) {
+                    val rate = ocrTaxInfo.standardRate
+                    val rateStr = if (rate == rate.toLong().toDouble()) "${rate.toLong()}%" else "${"%.1f".format(rate)}%"
+                    Row(modifier = Modifier.fillMaxWidth().padding(bottom = 6.dp), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                        if (ocrTaxInfo.includedInPrice) {
+                            FilterChip(
+                                selected = true,
+                                onClick = {},
+                                label = { Text("Tax $rateStr incl.", fontSize = 12.sp) },
+                                colors = FilterChipDefaults.filterChipColors(
+                                    selectedContainerColor = Color.White.copy(alpha = 0.15f),
+                                    selectedLabelColor = Color.White.copy(alpha = 0.7f)
+                                )
+                            )
+                        } else {
+                            FilterChip(
+                                selected = ocrTaxApplied,
+                                onClick = { ocrTaxApplied = !ocrTaxApplied },
+                                label = { Text(if (ocrTaxApplied) "Tax $rateStr added" else "Add Tax $rateStr", fontSize = 12.sp) },
+                                colors = FilterChipDefaults.filterChipColors(
+                                    containerColor = Color.White.copy(alpha = 0.1f),
+                                    labelColor = Color.White.copy(alpha = 0.6f),
+                                    selectedContainerColor = Color(0xFF34C759).copy(alpha = 0.7f),
+                                    selectedLabelColor = Color.White
+                                )
+                            )
+                        }
+                    }
+                }
                 Row(verticalAlignment = Alignment.CenterVertically) {
                     Column(modifier = Modifier.weight(1f)) {
                         Text(
                             "Selected: $receiptSym${"%.2f".format(selectedTotal)}",
                             color = Color.White, fontSize = 12.sp
                         )
+                        if (ocrTaxApplied && ocrTaxInfo != null && !ocrTaxInfo.includedInPrice && adjustedTotal != selectedTotal) {
+                            Text(
+                                "+ tax: $receiptSym${"%.2f".format(adjustedTotal)}",
+                                color = Color(0xFF34C759), fontSize = 13.sp
+                            )
+                        }
                         if (showConversion) {
                             Text(
-                                "= ${currencySymbol(toCurrency)}${"%.2f".format(selectedTotal * exchangeRate!!)}",
+                                "= ${currencySymbol(toCurrency)}${"%.2f".format(adjustedTotal * exchangeRate!!)}",
                                 color = Color(0xFFFFD700), fontSize = 16.sp, fontWeight = FontWeight.Bold
                             )
                         }
@@ -2319,7 +2645,7 @@ private fun OcrOverlayScreen(
                 }
                 Spacer(Modifier.height(6.dp))
                 if (showConversion) {
-                    val convertedTotal = selectedTotal * exchangeRate!!
+                    val convertedTotal = adjustedTotal * exchangeRate!!
                     val convertedStr = if (convertedTotal == kotlin.math.floor(convertedTotal))
                         convertedTotal.toLong().toString() else "%.2f".format(convertedTotal)
                     Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
