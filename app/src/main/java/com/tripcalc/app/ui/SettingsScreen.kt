@@ -417,8 +417,8 @@ fun SettingsScreen(vm: CalculatorViewModel, modifier: Modifier = Modifier) {
             HorizontalDivider(modifier = Modifier.padding(horizontal = 16.dp), color = colors.divider)
 
             Column(modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 12.dp)) {
-                Text("Distance unit pairs", color = colors.textPrimary, fontSize = 15.sp)
-                Text("Choose which conversions appear in the Distance tab", color = colors.textSecondary, fontSize = 12.sp)
+                Text("Unit converter pairs", color = colors.textPrimary, fontSize = 15.sp)
+                Text("Choose which conversions appear in the Units tab", color = colors.textSecondary, fontSize = 12.sp)
                 Spacer(Modifier.height(10.dp))
                 DistancePair.entries.forEach { dp ->
                     val isEnabled = dp in state.enabledDistancePairs

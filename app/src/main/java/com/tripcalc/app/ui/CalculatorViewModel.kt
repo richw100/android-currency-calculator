@@ -16,10 +16,11 @@ import java.util.Currency as JavaCurrency
 import java.util.UUID
 import kotlin.math.abs
 import kotlin.math.floor
+import kotlin.math.roundToInt
 
 enum class ConversionMode(val tabLabel: String, val settingsLabel: String) {
     CURRENCY("💱 FX",    "Currency (always on)"),
-    DISTANCE("📏 Dist",  "Distance converter"),
+    DISTANCE("📐 Units", "Unit converter"),
     TEMPERATURE("🌡 Temp", "Temperature converter"),
     TIP("🧾 Bill",       "Tip & bill splitter"),
     FUEL("⛽ mpg",       "Fuel economy")
@@ -33,10 +34,20 @@ enum class DistancePair(
     val factor: Double,
     val settingsLabel: String
 ) {
-    MILES_KM ("Miles",   "mi",  "Kilometres",  "km",  1.60934,  "Miles ↔ Kilometres"),
-    INCHES_CM("Inches",  "in",  "Centimetres", "cm",  2.54,     "Inches ↔ Centimetres"),
-    FEET_M   ("Feet",    "ft",  "Metres",      "m",   0.3048,   "Feet ↔ Metres"),
-    SQFT_SQM ("Sq feet", "ft²", "Sq metres",   "m²",  0.092903, "Sq feet ↔ Sq metres")
+    MILES_KM    ("Miles",      "mi",     "Kilometres",  "km",     1.60934,  "Miles ↔ Kilometres"),
+    INCHES_CM   ("Inches",     "in",     "Centimetres", "cm",     2.54,     "Inches ↔ Centimetres"),
+    FEET_M      ("Feet",       "ft",     "Metres",      "m",      0.3048,   "Feet ↔ Metres"),
+    SQFT_SQM    ("Sq feet",    "ft²",    "Sq metres",   "m²",     0.092903, "Sq feet ↔ Sq metres"),
+    UK_PINT_ML  ("UK pint",    "pt",     "Millilitres", "ml",     568.261,  "UK Pint ↔ Millilitres"),
+    US_PINT_ML  ("US pint",    "pt US",  "Millilitres", "ml",     473.176,  "US Pint ↔ Millilitres"),
+    UK_GAL_L    ("UK gallon",  "gal UK", "Litres",      "L",      4.54609,  "UK Gallon ↔ Litres"),
+    US_GAL_L    ("US gallon",  "gal US", "Litres",      "L",      3.78541,  "US Gallon ↔ Litres"),
+    UK_US_GAL   ("UK gallon",  "gal UK", "US gallon",   "gal US", 1.20095,  "UK Gallon ↔ US Gallon"),
+    LB_KG       ("Pounds",     "lb",     "Kilograms",   "kg",     0.453592, "Pounds ↔ Kilograms"),
+    STONE_LB_KG ("Stone",      "st",     "Kilograms",   "kg",     6.35029,  "Stone+lb ↔ Kilograms"),
+    OZ_G        ("Ounces",     "oz",     "Grams",       "g",      28.3495,  "Ounces ↔ Grams"),
+    FLUID_OZ_ML ("Fluid oz",   "fl oz",  "Millilitres", "ml",     29.5735,  "Fluid oz ↔ Millilitres"),
+    MPH_KPH     ("mph",        "mph",    "km/h",        "km/h",   1.60934,  "mph ↔ km/h")
 }
 
 enum class TempUnit(val label: String, val abbr: String) {
@@ -246,7 +257,8 @@ data class CalculatorUiState(
     val taxApplied: Boolean = true,
     val tipAfterTax: Boolean = false,
     val noTip: Boolean = false,
-    val tipPresets: List<Double> = listOf(10.0, 15.0, 20.0)
+    val tipPresets: List<Double> = listOf(10.0, 15.0, 20.0),
+    val stoneLbPart: Int = 0
 )
 
 sealed class CalculatorAction {
@@ -310,6 +322,8 @@ sealed class CalculatorAction {
     data class SetTipAfterTax(val afterTax: Boolean) : CalculatorAction()
     data class SetNoTip(val noTip: Boolean) : CalculatorAction()
     data class SetTipPreset(val index: Int, val percent: Double) : CalculatorAction()
+    object IncrLbPart : CalculatorAction()
+    object DecrLbPart : CalculatorAction()
 }
 
 private data class BracketState(val firstOperand: Double?, val pendingOp: Char?)
@@ -548,7 +562,15 @@ class CalculatorViewModel(application: Application) : AndroidViewModel(applicati
                 updateDisplay(); return
             }
             is CalculatorAction.SetDistancePair -> {
-                _uiState.update { it.copy(distancePair = action.pair, distanceReversed = false) }
+                _uiState.update { it.copy(distancePair = action.pair, distanceReversed = false, stoneLbPart = 0) }
+                updateDisplay(); return
+            }
+            CalculatorAction.IncrLbPart -> {
+                _uiState.update { it.copy(stoneLbPart = (it.stoneLbPart + 1).coerceAtMost(13)) }
+                updateDisplay(); return
+            }
+            CalculatorAction.DecrLbPart -> {
+                _uiState.update { it.copy(stoneLbPart = (it.stoneLbPart - 1).coerceAtLeast(0)) }
                 updateDisplay(); return
             }
             is CalculatorAction.SetEnabledDistancePairs -> {
@@ -1121,6 +1143,29 @@ class CalculatorViewModel(application: Application) : AndroidViewModel(applicati
         val value = currentInput.toDoubleOrNull() ?: 0.0
         val s = _uiState.value
         val pair = s.distancePair
+        if (pair == DistancePair.STONE_LB_KG) {
+            val lbs = s.stoneLbPart
+            if (!s.distanceReversed) {
+                val kg = (value * 14 + lbs) * 0.453592
+                _uiState.update { it.copy(
+                    fromAmount = "${currentInput.ifEmpty { "0" }} st $lbs lb",
+                    toAmount   = "kg ${"%.3f".format(kg)}",
+                    exchangeRateLabel = "1 st = 6.350 kg  ·  1 lb = 0.454 kg",
+                    customRatePctDiff = null
+                )}
+            } else {
+                val totalLbs = value / 0.453592
+                val stonePart = (totalLbs / 14).toLong()
+                val lbPart    = (totalLbs % 14).roundToInt().coerceIn(0, 13)
+                _uiState.update { it.copy(
+                    fromAmount = "kg ${currentInput.ifEmpty { "0" }}",
+                    toAmount   = "$stonePart st $lbPart lb",
+                    exchangeRateLabel = "1 kg = 2.205 lb  ·  14 lb = 1 st",
+                    customRatePctDiff = null
+                )}
+            }
+            return
+        }
         val fromAbbr = if (s.distanceReversed) pair.toAbbr   else pair.fromAbbr
         val toAbbr   = if (s.distanceReversed) pair.fromAbbr else pair.toAbbr
         val factor   = if (s.distanceReversed) 1.0 / pair.factor else pair.factor

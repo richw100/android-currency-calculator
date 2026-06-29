@@ -718,12 +718,15 @@ fun CalculatorScreen(vm: CalculatorViewModel = viewModel(), modifier: Modifier =
             }
         }
         ConversionMode.DISTANCE -> DistanceConversionRow(
-            pair = state.distancePair,
-            reversed = state.distanceReversed,
+            pair         = state.distancePair,
+            reversed     = state.distanceReversed,
             enabledPairs = state.enabledDistancePairs,
-            rateLabel = state.exchangeRateLabel,
-            onSwap = { vm.onAction(CalculatorAction.SwapDistanceUnits) },
-            onSelectPair = { vm.onAction(CalculatorAction.SetDistancePair(it)) }
+            rateLabel    = state.exchangeRateLabel,
+            stoneLbPart  = state.stoneLbPart,
+            onSwap       = { vm.onAction(CalculatorAction.SwapDistanceUnits) },
+            onSelectPair = { vm.onAction(CalculatorAction.SetDistancePair(it)) },
+            onIncrLb     = { vm.onAction(CalculatorAction.IncrLbPart) },
+            onDecrLb     = { vm.onAction(CalculatorAction.DecrLbPart) }
         )
         ConversionMode.TEMPERATURE -> TempConversionRow(
             unit = state.tempUnit,
@@ -984,40 +987,55 @@ private fun CurrencyPickerRow(code: String, colors: AppColors, star: Boolean, on
 
 // ── Distance conversion row ───────────────────────────────────────────────────
 
+@OptIn(ExperimentalMaterial3Api::class)
 @Composable
 private fun DistanceConversionRow(
     pair: DistancePair,
     reversed: Boolean,
     enabledPairs: Set<DistancePair>,
     rateLabel: String,
+    stoneLbPart: Int,
     onSwap: () -> Unit,
-    onSelectPair: (DistancePair) -> Unit
+    onSelectPair: (DistancePair) -> Unit,
+    onIncrLb: () -> Unit,
+    onDecrLb: () -> Unit
 ) {
     val colors = LocalAppColors.current
     val fromLabel = if (reversed) "${pair.toLabel} (${pair.toAbbr})" else "${pair.fromLabel} (${pair.fromAbbr})"
     val toLabel   = if (reversed) "${pair.fromLabel} (${pair.fromAbbr})" else "${pair.toLabel} (${pair.toAbbr})"
     val visiblePairs = DistancePair.entries.filter { it in enabledPairs }
+    var dropdownExpanded by remember { mutableStateOf(false) }
+    val dropdownLabel = if (reversed) "${pair.toLabel} ↔ ${pair.fromLabel}"
+                        else          "${pair.fromLabel} ↔ ${pair.toLabel}"
     Column(modifier = Modifier.fillMaxWidth()) {
-        // Pair selector chips — only shown when more than one pair is enabled
-        if (visiblePairs.size > 1) {
-            Row(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .padding(horizontal = 12.dp, vertical = 2.dp),
-                horizontalArrangement = Arrangement.spacedBy(6.dp)
+        ExposedDropdownMenuBox(
+            expanded = dropdownExpanded,
+            onExpandedChange = { dropdownExpanded = !dropdownExpanded },
+            modifier = Modifier.fillMaxWidth().padding(horizontal = 12.dp, vertical = 2.dp)
+        ) {
+            OutlinedTextField(
+                value = dropdownLabel,
+                onValueChange = {},
+                readOnly = true,
+                trailingIcon = { ExposedDropdownMenuDefaults.TrailingIcon(expanded = dropdownExpanded) },
+                modifier = Modifier.menuAnchor().fillMaxWidth(),
+                textStyle = MaterialTheme.typography.bodyMedium.copy(color = colors.textPrimary),
+                colors = OutlinedTextFieldDefaults.colors(
+                    focusedBorderColor      = colors.inputBorder,
+                    unfocusedBorderColor    = colors.inputBorder,
+                    focusedContainerColor   = colors.surface,
+                    unfocusedContainerColor = colors.surface,
+                )
+            )
+            ExposedDropdownMenu(
+                expanded = dropdownExpanded,
+                onDismissRequest = { dropdownExpanded = false },
+                containerColor = colors.surface
             ) {
                 visiblePairs.forEach { p ->
-                    val selected = p == pair
-                    FilterChip(
-                        selected = selected,
-                        onClick = { onSelectPair(p) },
-                        label = { Text("${p.fromAbbr}↔${p.toAbbr}", fontSize = 11.sp) },
-                        colors = FilterChipDefaults.filterChipColors(
-                            containerColor = colors.buttonDigit,
-                            labelColor = colors.textPrimary,
-                            selectedContainerColor = colors.operator,
-                            selectedLabelColor = colors.operatorContent
-                        )
+                    DropdownMenuItem(
+                        text = { Text("${p.fromLabel} ↔ ${p.toLabel}", color = colors.textPrimary) },
+                        onClick = { onSelectPair(p); dropdownExpanded = false }
                     )
                 }
             }
@@ -1047,6 +1065,31 @@ private fun DistanceConversionRow(
                     .padding(horizontal = 12.dp, vertical = 10.dp)
             ) {
                 Text(text = "To: $toLabel", color = colors.textPrimary, fontSize = 13.sp, maxLines = 1)
+            }
+        }
+        if (pair == DistancePair.STONE_LB_KG && !reversed) {
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(horizontal = 16.dp, vertical = 4.dp),
+                horizontalArrangement = Arrangement.Center,
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Text("+ lbs:", color = colors.textSecondary, fontSize = 13.sp,
+                     modifier = Modifier.padding(end = 8.dp))
+                IconButton(onClick = onDecrLb, modifier = Modifier.size(32.dp)) {
+                    Text("−", fontSize = 20.sp, color = colors.textPrimary)
+                }
+                Text(
+                    text = "$stoneLbPart",
+                    color = colors.textPrimary,
+                    fontSize = 16.sp,
+                    modifier = Modifier.widthIn(min = 36.dp),
+                    textAlign = TextAlign.Center
+                )
+                IconButton(onClick = onIncrLb, modifier = Modifier.size(32.dp)) {
+                    Text("+", fontSize = 20.sp, color = colors.textPrimary)
+                }
             }
         }
         if (rateLabel.isNotEmpty()) {
