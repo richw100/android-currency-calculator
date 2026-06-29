@@ -1018,7 +1018,7 @@ private fun DistanceConversionRow(
                 onValueChange = {},
                 readOnly = true,
                 trailingIcon = { ExposedDropdownMenuDefaults.TrailingIcon(expanded = dropdownExpanded) },
-                modifier = Modifier.menuAnchor().fillMaxWidth(),
+                modifier = Modifier.menuAnchor(MenuAnchorType.PrimaryNotEditable, enabled = true).fillMaxWidth(),
                 textStyle = MaterialTheme.typography.bodyMedium.copy(color = colors.textPrimary),
                 colors = OutlinedTextFieldDefaults.colors(
                     focusedBorderColor      = colors.inputBorder,
