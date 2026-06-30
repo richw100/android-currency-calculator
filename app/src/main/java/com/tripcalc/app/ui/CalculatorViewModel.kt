@@ -4,8 +4,10 @@ import android.app.Application
 import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
 import com.tripcalc.app.data.CANADA_PROVINCE_TAX_RATES
+import com.tripcalc.app.data.CountryLocalisationInfo
 import com.tripcalc.app.data.EU_VAT_RATES
 import com.tripcalc.app.data.ExchangeRateRepository
+import com.tripcalc.app.data.LocalisationRepository
 import com.tripcalc.app.data.US_STATE_TAX_RATES
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
@@ -270,7 +272,12 @@ data class CalculatorUiState(
     val noTip: Boolean = false,
     val tipPresets: List<Double> = listOf(10.0, 15.0, 20.0),
     val stoneLbPart: Int = 0,
-    val distanceUseLitres: Boolean = false
+    val distanceUseLitres: Boolean = false,
+    val localisationCountryCode: String = "GB",
+    val localisationInfo: CountryLocalisationInfo? = null,
+    val localisationLoading: Boolean = false,
+    val localisationError: Boolean = false,
+    val localisationRecentCountries: List<String> = emptyList()
 )
 
 sealed class CalculatorAction {
@@ -337,12 +344,15 @@ sealed class CalculatorAction {
     object IncrLbPart : CalculatorAction()
     object DecrLbPart : CalculatorAction()
     object ToggleDistanceLitres : CalculatorAction()
+    data class SetLocalisationCountry(val code: String) : CalculatorAction()
+    object RefreshLocalisation : CalculatorAction()
 }
 
 private data class BracketState(val firstOperand: Double?, val pendingOp: Char?)
 
 class CalculatorViewModel(application: Application) : AndroidViewModel(application) {
     private val repository = ExchangeRateRepository(application)
+    private val localisationRepository = LocalisationRepository(application)
 
     private val _uiState = MutableStateFlow(CalculatorUiState())
     val uiState: StateFlow<CalculatorUiState> = _uiState.asStateFlow()
@@ -394,7 +404,9 @@ class CalculatorViewModel(application: Application) : AndroidViewModel(applicati
             val tipAfterTax = repository.loadTipAfterTax()
             val noTip = repository.loadNoTip()
             val tipPresets = repository.loadTipPresets()
-            _uiState.update { it.copy(toCurrency = to, fromCurrency = from, recentCurrencies = recents, customRates = customRates, hapticEnabled = hapticEnabled, history = history, darkModePref = darkModePref, accentScheme = accentScheme, defaultTipPercent = defaultTipPercent, tipPercent = defaultTipPercent, customTipPercent = customTipPercent, fuelUseUkGallons = fuelUseUkGallons, swapZeroDot = swapZeroDot, enabledModes = enabledModes, enabledDistancePairs = enabledDistancePairs, cardProfiles = cardProfiles, activeCardId = activeCardId, sizeCategory = sizeCategory, shoeIsMens = shoeIsMens, shoeFromCountry = shoeFrom, shoeToCountry = shoeTo, womensFromCountry = womensFrom, womensToCountry = womensTo, mensFromCountry = mensFrom, mensToCountry = mensTo, helpHintSeen = helpHintSeen, ocrConvertEnabled = ocrConvertEnabled, taxEnabled = taxEnabled, taxCountryCode = taxCountryCode, taxStateCode = taxStateCode, taxRateOverride = taxRateOverride, taxApplied = taxApplied, tipAfterTax = tipAfterTax, noTip = noTip, tipPresets = tipPresets) }
+            val locCountryCode = localisationRepository.loadCountryCode()
+            val locRecentCountries = localisationRepository.loadRecentCountries()
+            _uiState.update { it.copy(toCurrency = to, fromCurrency = from, recentCurrencies = recents, customRates = customRates, hapticEnabled = hapticEnabled, history = history, darkModePref = darkModePref, accentScheme = accentScheme, defaultTipPercent = defaultTipPercent, tipPercent = defaultTipPercent, customTipPercent = customTipPercent, fuelUseUkGallons = fuelUseUkGallons, swapZeroDot = swapZeroDot, enabledModes = enabledModes, enabledDistancePairs = enabledDistancePairs, cardProfiles = cardProfiles, activeCardId = activeCardId, sizeCategory = sizeCategory, shoeIsMens = shoeIsMens, shoeFromCountry = shoeFrom, shoeToCountry = shoeTo, womensFromCountry = womensFrom, womensToCountry = womensTo, mensFromCountry = mensFrom, mensToCountry = mensTo, helpHintSeen = helpHintSeen, ocrConvertEnabled = ocrConvertEnabled, taxEnabled = taxEnabled, taxCountryCode = taxCountryCode, taxStateCode = taxStateCode, taxRateOverride = taxRateOverride, taxApplied = taxApplied, tipAfterTax = tipAfterTax, noTip = noTip, tipPresets = tipPresets, localisationCountryCode = locCountryCode, localisationRecentCountries = locRecentCountries) }
             refreshCurrentTaxInfo()
             fetchRates(forceRefresh = false)
         }
@@ -809,6 +821,31 @@ class CalculatorViewModel(application: Application) : AndroidViewModel(applicati
                 justCalculated = true; shouldResetInput = false
                 _uiState.update { it.copy(isError = false, conversionMode = ConversionMode.CURRENCY) }
                 updateDisplay(); return
+            }
+            is CalculatorAction.SetLocalisationCountry -> {
+                val updatedRecents = (_uiState.value.localisationRecentCountries.toMutableList()
+                    .also { it.remove(action.code) }
+                    .also { it.add(0, action.code) })
+                    .take(5)
+                _uiState.update { it.copy(localisationCountryCode = action.code, localisationLoading = true, localisationError = false, localisationInfo = null, localisationRecentCountries = updatedRecents) }
+                viewModelScope.launch {
+                    localisationRepository.saveCountryCode(action.code)
+                    localisationRepository.saveRecentCountries(updatedRecents)
+                    runCatching { localisationRepository.getCountryInfo(action.code) }
+                        .onSuccess { info -> _uiState.update { it.copy(localisationInfo = info, localisationLoading = false) } }
+                        .onFailure { _uiState.update { it.copy(localisationLoading = false, localisationError = true) } }
+                }
+                return
+            }
+            is CalculatorAction.RefreshLocalisation -> {
+                val code = _uiState.value.localisationCountryCode
+                _uiState.update { it.copy(localisationLoading = true, localisationError = false) }
+                viewModelScope.launch {
+                    runCatching { localisationRepository.getCountryInfo(code, forceRefresh = true) }
+                        .onSuccess { info -> _uiState.update { it.copy(localisationInfo = info, localisationLoading = false) } }
+                        .onFailure { _uiState.update { it.copy(localisationLoading = false, localisationError = true) } }
+                }
+                return
             }
         }
         updateDisplay()

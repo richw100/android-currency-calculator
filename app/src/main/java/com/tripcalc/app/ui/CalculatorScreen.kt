@@ -98,6 +98,7 @@ import com.tripcalc.app.BuildConfig
 import com.tripcalc.app.R
 import com.tripcalc.app.data.CANADA_PROVINCE_TAX_RATES
 import com.tripcalc.app.data.US_STATE_TAX_RATES
+import androidx.compose.material.icons.filled.Public
 import com.tripcalc.app.ui.theme.CalcAppTheme
 
 fun currencyFlag(code: String): String {
@@ -127,7 +128,7 @@ fun currencySymbol(code: String) = currencySymbolCache.getOrPut(code) {
 
 // ── Root composable ──────────────────────────────────────────────────────────
 
-private enum class Screen { Calculator, History, Settings, About, Converter, Help, OcrOverlay }
+private enum class Screen { Calculator, History, Settings, About, Converter, Help, OcrOverlay, Localisation }
 
 private data class DetectedNumber(
     val rawText: String,
@@ -277,6 +278,11 @@ fun AppScreen() {
                                 onDismissRequest = { menuExpanded = false }
                             ) {
                                 DropdownMenuItem(
+                                    text = { Text("Local Info") },
+                                    leadingIcon = { Icon(Icons.Default.Public, null) },
+                                    onClick = { screen = Screen.Localisation; menuExpanded = false }
+                                )
+                                DropdownMenuItem(
                                     text = { Text("Size Converter") },
                                     leadingIcon = { Icon(Icons.Default.Checkroom, null) },
                                     onClick = { screen = Screen.Converter; menuExpanded = false }
@@ -313,12 +319,13 @@ fun AppScreen() {
                 HorizontalDivider(color = colors.divider, thickness = 1.dp)
 
                 when (screen) {
-                    Screen.Calculator -> CalculatorScreen(vm = vm, modifier = Modifier.weight(1f))
-                    Screen.History    -> HistoryScreen(vm = vm, modifier = Modifier.weight(1f), onEntryRestored = { screen = Screen.Calculator })
-                    Screen.About      -> AboutScreen(modifier = Modifier.weight(1f))
-                    Screen.Settings   -> SettingsScreen(vm = vm, modifier = Modifier.weight(1f))
-                    Screen.Converter  -> SizeConverterScreen(vm = vm, modifier = Modifier.weight(1f))
-                    Screen.Help       -> HelpScreen(modifier = Modifier.weight(1f))
+                    Screen.Calculator   -> CalculatorScreen(vm = vm, modifier = Modifier.weight(1f))
+                    Screen.History      -> HistoryScreen(vm = vm, modifier = Modifier.weight(1f), onEntryRestored = { screen = Screen.Calculator })
+                    Screen.About        -> AboutScreen(modifier = Modifier.weight(1f))
+                    Screen.Settings     -> SettingsScreen(vm = vm, modifier = Modifier.weight(1f))
+                    Screen.Converter    -> SizeConverterScreen(vm = vm, modifier = Modifier.weight(1f))
+                    Screen.Help         -> HelpScreen(modifier = Modifier.weight(1f))
+                    Screen.Localisation -> LocalisationScreen(vm = vm, modifier = Modifier.weight(1f))
                     Screen.OcrOverlay -> {
                         val bmp = ocrBitmap
                         if (bmp != null) {
