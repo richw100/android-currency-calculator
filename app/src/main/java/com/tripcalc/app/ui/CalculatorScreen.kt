@@ -80,7 +80,10 @@ import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import android.app.Activity
+import androidx.compose.ui.platform.LocalView
 import androidx.core.content.FileProvider
+import androidx.core.view.WindowCompat
 import com.google.mlkit.vision.common.InputImage
 import com.google.mlkit.vision.text.TextRecognition
 import com.google.mlkit.vision.text.latin.TextRecognizerOptions
@@ -165,6 +168,14 @@ fun AppScreen() {
         DarkModePref.DARK   -> true
     }
     val colors = buildAppColors(effectiveIsDark, state.accentScheme)
+
+    val view = LocalView.current
+    if (!view.isInEditMode) {
+        SideEffect {
+            val window = (view.context as Activity).window
+            WindowCompat.getInsetsController(window, view).isAppearanceLightStatusBars = !effectiveIsDark
+        }
+    }
 
     val context = LocalContext.current
     var ocrBitmap by remember { mutableStateOf<Bitmap?>(null) }
