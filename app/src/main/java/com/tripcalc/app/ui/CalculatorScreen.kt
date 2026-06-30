@@ -44,6 +44,7 @@ import androidx.compose.material.icons.filled.SwapHoriz
 import androidx.compose.material.icons.filled.Checkroom
 import androidx.compose.material.icons.filled.Edit
 import androidx.compose.material.icons.filled.WifiOff
+import androidx.compose.material.icons.filled.ArrowDropDown
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
@@ -57,6 +58,7 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.layout.ContentScale
+import androidx.compose.ui.layout.layout
 import androidx.compose.ui.unit.IntOffset
 import java.util.Currency as JavaCurrency
 import android.os.Build
@@ -718,15 +720,17 @@ fun CalculatorScreen(vm: CalculatorViewModel = viewModel(), modifier: Modifier =
             }
         }
         ConversionMode.DISTANCE -> DistanceConversionRow(
-            pair         = state.distancePair,
-            reversed     = state.distanceReversed,
-            enabledPairs = state.enabledDistancePairs,
-            rateLabel    = state.exchangeRateLabel,
-            stoneLbPart  = state.stoneLbPart,
-            onSwap       = { vm.onAction(CalculatorAction.SwapDistanceUnits) },
-            onSelectPair = { vm.onAction(CalculatorAction.SetDistancePair(it)) },
-            onIncrLb     = { vm.onAction(CalculatorAction.IncrLbPart) },
-            onDecrLb     = { vm.onAction(CalculatorAction.DecrLbPart) }
+            pair            = state.distancePair,
+            reversed        = state.distanceReversed,
+            enabledPairs    = state.enabledDistancePairs,
+            rateLabel       = state.exchangeRateLabel,
+            stoneLbPart     = state.stoneLbPart,
+            useLitres       = state.distanceUseLitres,
+            onSwap          = { vm.onAction(CalculatorAction.SwapDistanceUnits) },
+            onSelectPair    = { vm.onAction(CalculatorAction.SetDistancePair(it)) },
+            onIncrLb        = { vm.onAction(CalculatorAction.IncrLbPart) },
+            onDecrLb        = { vm.onAction(CalculatorAction.DecrLbPart) },
+            onToggleLitres  = { vm.onAction(CalculatorAction.ToggleDistanceLitres) }
         )
         ConversionMode.TEMPERATURE -> TempConversionRow(
             unit = state.tempUnit,
@@ -995,10 +999,12 @@ private fun DistanceConversionRow(
     enabledPairs: Set<DistancePair>,
     rateLabel: String,
     stoneLbPart: Int,
+    useLitres: Boolean,
     onSwap: () -> Unit,
     onSelectPair: (DistancePair) -> Unit,
     onIncrLb: () -> Unit,
-    onDecrLb: () -> Unit
+    onDecrLb: () -> Unit,
+    onToggleLitres: () -> Unit
 ) {
     val colors = LocalAppColors.current
     val fromLabel = if (reversed) "${pair.toLabel} (${pair.toAbbr})" else "${pair.fromLabel} (${pair.fromAbbr})"
@@ -1013,30 +1019,52 @@ private fun DistanceConversionRow(
             onExpandedChange = { dropdownExpanded = !dropdownExpanded },
             modifier = Modifier.fillMaxWidth().padding(horizontal = 12.dp, vertical = 2.dp)
         ) {
-            OutlinedTextField(
-                value = dropdownLabel,
-                onValueChange = {},
-                readOnly = true,
-                trailingIcon = { ExposedDropdownMenuDefaults.TrailingIcon(expanded = dropdownExpanded) },
-                modifier = Modifier.menuAnchor(MenuAnchorType.PrimaryNotEditable, enabled = true).fillMaxWidth(),
-                textStyle = MaterialTheme.typography.bodyMedium.copy(color = colors.textPrimary),
-                colors = OutlinedTextFieldDefaults.colors(
-                    focusedBorderColor      = colors.inputBorder,
-                    unfocusedBorderColor    = colors.inputBorder,
-                    focusedContainerColor   = colors.surface,
-                    unfocusedContainerColor = colors.surface,
+            Row(
+                modifier = Modifier
+                    .menuAnchor(MenuAnchorType.PrimaryNotEditable, enabled = true)
+                    .fillMaxWidth()
+                    .border(1.dp, colors.inputBorder, RoundedCornerShape(8.dp))
+                    .padding(horizontal = 12.dp, vertical = 9.dp),
+                horizontalArrangement = Arrangement.SpaceBetween,
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Text(
+                    text = dropdownLabel,
+                    color = colors.textPrimary,
+                    fontSize = 13.sp,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis,
+                    modifier = Modifier.weight(1f)
                 )
-            )
+                Icon(
+                    imageVector = Icons.Default.ArrowDropDown,
+                    contentDescription = null,
+                    tint = colors.textSecondary,
+                    modifier = Modifier.graphicsLayer { rotationZ = if (dropdownExpanded) 180f else 0f }
+                )
+            }
             ExposedDropdownMenu(
                 expanded = dropdownExpanded,
                 onDismissRequest = { dropdownExpanded = false },
                 containerColor = colors.surface
             ) {
-                visiblePairs.forEach { p ->
-                    DropdownMenuItem(
-                        text = { Text("${p.fromLabel} ↔ ${p.toLabel}", color = colors.textPrimary) },
-                        onClick = { onSelectPair(p); dropdownExpanded = false }
-                    )
+                UnitCategory.entries.forEach { category ->
+                    val categoryPairs = visiblePairs.filter { it.category == category }
+                    if (categoryPairs.isNotEmpty()) {
+                        Text(
+                            text = category.label.uppercase(),
+                            color = colors.textMuted,
+                            fontSize = 10.sp,
+                            fontWeight = FontWeight.SemiBold,
+                            modifier = Modifier.padding(horizontal = 16.dp, vertical = 4.dp)
+                        )
+                        categoryPairs.forEach { p ->
+                            DropdownMenuItem(
+                                text = { Text("${p.fromLabel} ↔ ${p.toLabel}", color = colors.textPrimary) },
+                                onClick = { onSelectPair(p); dropdownExpanded = false }
+                            )
+                        }
+                    }
                 }
             }
         }
@@ -1090,6 +1118,38 @@ private fun DistanceConversionRow(
                 IconButton(onClick = onIncrLb, modifier = Modifier.size(32.dp)) {
                     Text("+", fontSize = 20.sp, color = colors.textPrimary)
                 }
+            }
+        }
+        if (pair.toAbbr == "ml") {
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(horizontal = 16.dp),
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Text("Show in litres", color = colors.textSecondary, fontSize = 12.sp,
+                     modifier = Modifier.weight(1f))
+                Switch(
+                    checked = useLitres,
+                    onCheckedChange = { onToggleLitres() },
+                    modifier = Modifier.layout { measurable, constraints ->
+                        val s = 0.6f
+                        val p = measurable.measure(constraints)
+                        val w = (p.width * s).toInt()
+                        val h = (p.height * s).toInt()
+                        layout(w, h) {
+                            p.placeWithLayer(
+                                x = -((p.width - w) / 2),
+                                y = -((p.height - h) / 2),
+                                layerBlock = { scaleX = s; scaleY = s }
+                            )
+                        }
+                    },
+                    colors = SwitchDefaults.colors(
+                        checkedThumbColor = Color.White,
+                        checkedTrackColor = colors.positiveColor
+                    )
+                )
             }
         }
         if (rateLabel.isNotEmpty()) {
@@ -1325,7 +1385,7 @@ private fun TipControlsRow(
                             selected = taxApplied,
                             onClick = {},
                             modifier = Modifier.fillMaxWidth(),
-                            label = { Text("Tax $taxRateStr", fontSize = 11.sp, maxLines = 1) },
+                            label = { Text("Sales Tax $taxRateStr", fontSize = 11.sp, maxLines = 1) },
                             colors = FilterChipDefaults.filterChipColors(
                                 selectedContainerColor = colors.positiveColor,
                                 selectedLabelColor = Color.White,

@@ -19,35 +19,46 @@ import kotlin.math.floor
 import kotlin.math.roundToInt
 
 enum class ConversionMode(val tabLabel: String, val settingsLabel: String) {
-    CURRENCY("💱 FX",    "Currency (always on)"),
-    DISTANCE("📐 Units", "Unit converter"),
+    CURRENCY("💱 FX",      "Currency (always on)"),
+    TIP("🧾 Bill",         "Tip & bill splitter"),
     TEMPERATURE("🌡 Temp", "Temperature converter"),
-    TIP("🧾 Bill",       "Tip & bill splitter"),
-    FUEL("⛽ mpg",       "Fuel economy")
+    DISTANCE("📐 Units",   "Unit converter"),
+    FUEL("⛽ mpg",         "Fuel economy")
 }
 
 enum class FuelMode { MPG, KWH }
+
+enum class UnitCategory(val label: String) {
+    DISTANCE("Distance"), VOLUME("Volume"), WEIGHT("Weight"), SPEED("Speed"),
+    PRESSURE("Pressure"), ENERGY("Energy")
+}
 
 enum class DistancePair(
     val fromLabel: String, val fromAbbr: String,
     val toLabel: String,   val toAbbr: String,
     val factor: Double,
-    val settingsLabel: String
+    val settingsLabel: String,
+    val category: UnitCategory
 ) {
-    MILES_KM    ("Miles",      "mi",     "Kilometres",  "km",     1.60934,  "Miles ↔ Kilometres"),
-    INCHES_CM   ("Inches",     "in",     "Centimetres", "cm",     2.54,     "Inches ↔ Centimetres"),
-    FEET_M      ("Feet",       "ft",     "Metres",      "m",      0.3048,   "Feet ↔ Metres"),
-    SQFT_SQM    ("Sq feet",    "ft²",    "Sq metres",   "m²",     0.092903, "Sq feet ↔ Sq metres"),
-    UK_PINT_ML  ("UK pint",    "pt",     "Millilitres", "ml",     568.261,  "UK Pint ↔ Millilitres"),
-    US_PINT_ML  ("US pint",    "pt US",  "Millilitres", "ml",     473.176,  "US Pint ↔ Millilitres"),
-    UK_GAL_L    ("UK gallon",  "gal UK", "Litres",      "L",      4.54609,  "UK Gallon ↔ Litres"),
-    US_GAL_L    ("US gallon",  "gal US", "Litres",      "L",      3.78541,  "US Gallon ↔ Litres"),
-    UK_US_GAL   ("UK gallon",  "gal UK", "US gallon",   "gal US", 1.20095,  "UK Gallon ↔ US Gallon"),
-    LB_KG       ("Pounds",     "lb",     "Kilograms",   "kg",     0.453592, "Pounds ↔ Kilograms"),
-    STONE_LB_KG ("Stone",      "st",     "Kilograms",   "kg",     6.35029,  "Stone+lb ↔ Kilograms"),
-    OZ_G        ("Ounces",     "oz",     "Grams",       "g",      28.3495,  "Ounces ↔ Grams"),
-    FLUID_OZ_ML ("Fluid oz",   "fl oz",  "Millilitres", "ml",     29.5735,  "Fluid oz ↔ Millilitres"),
-    MPH_KPH     ("mph",        "mph",    "km/h",        "km/h",   1.60934,  "mph ↔ km/h")
+    MILES_KM    ("Miles",      "mi",     "Kilometres",  "km",     1.60934,  "Miles ↔ Kilometres",     UnitCategory.DISTANCE),
+    INCHES_CM   ("Inches",     "in",     "Centimetres", "cm",     2.54,     "Inches ↔ Centimetres",   UnitCategory.DISTANCE),
+    FEET_M      ("Feet",       "ft",     "Metres",      "m",      0.3048,   "Feet ↔ Metres",          UnitCategory.DISTANCE),
+    YARDS_M     ("Yards",      "yd",     "Metres",      "m",      0.9144,   "Yards ↔ Metres",         UnitCategory.DISTANCE),
+    SQFT_SQM    ("Sq feet",    "ft²",    "Sq metres",   "m²",     0.092903, "Sq feet ↔ Sq metres",    UnitCategory.DISTANCE),
+    ACRES_HA    ("Acres",      "ac",     "Hectares",    "ha",     0.404686, "Acres ↔ Hectares",       UnitCategory.DISTANCE),
+    UK_PINT_ML  ("UK pint",    "pt",     "Millilitres", "ml",     568.261,  "UK Pint ↔ Millilitres",  UnitCategory.VOLUME),
+    US_PINT_ML  ("US pint",    "pt US",  "Millilitres", "ml",     473.176,  "US Pint ↔ Millilitres",  UnitCategory.VOLUME),
+    UK_GAL_L    ("UK gallon",  "gal UK", "Litres",      "L",      4.54609,  "UK Gallon ↔ Litres",     UnitCategory.VOLUME),
+    US_GAL_L    ("US gallon",  "gal US", "Litres",      "L",      3.78541,  "US Gallon ↔ Litres",     UnitCategory.VOLUME),
+    UK_US_GAL   ("UK gallon",  "gal UK", "US gallon",   "gal US", 1.20095,  "UK Gallon ↔ US Gallon",  UnitCategory.VOLUME),
+    FLUID_OZ_ML ("Fluid oz",   "fl oz",  "Millilitres", "ml",     29.5735,  "Fluid oz ↔ Millilitres", UnitCategory.VOLUME),
+    US_CUP_ML   ("US cup",     "cup",    "Millilitres", "ml",     236.588,  "US Cup ↔ Millilitres",   UnitCategory.VOLUME),
+    LB_KG       ("Pounds",     "lb",     "Kilograms",   "kg",     0.453592, "Pounds ↔ Kilograms",     UnitCategory.WEIGHT),
+    STONE_LB_KG ("Stone",      "st",     "Kilograms",   "kg",     6.35029,  "Stone+lb ↔ Kilograms",   UnitCategory.WEIGHT),
+    OZ_G        ("Ounces",     "oz",     "Grams",       "g",      28.3495,  "Ounces ↔ Grams",         UnitCategory.WEIGHT),
+    MPH_KPH     ("mph",        "mph",    "km/h",        "km/h",   1.60934,  "mph ↔ km/h",             UnitCategory.SPEED),
+    PSI_BAR     ("PSI",        "psi",    "Bar",         "bar",    0.0689476,"PSI ↔ Bar",               UnitCategory.PRESSURE),
+    KCAL_KJ     ("kcal",       "kcal",   "Kilojoules",  "kJ",     4.18400,  "kcal ↔ kJ",              UnitCategory.ENERGY)
 }
 
 enum class TempUnit(val label: String, val abbr: String) {
@@ -258,7 +269,8 @@ data class CalculatorUiState(
     val tipAfterTax: Boolean = false,
     val noTip: Boolean = false,
     val tipPresets: List<Double> = listOf(10.0, 15.0, 20.0),
-    val stoneLbPart: Int = 0
+    val stoneLbPart: Int = 0,
+    val distanceUseLitres: Boolean = false
 )
 
 sealed class CalculatorAction {
@@ -324,6 +336,7 @@ sealed class CalculatorAction {
     data class SetTipPreset(val index: Int, val percent: Double) : CalculatorAction()
     object IncrLbPart : CalculatorAction()
     object DecrLbPart : CalculatorAction()
+    object ToggleDistanceLitres : CalculatorAction()
 }
 
 private data class BracketState(val firstOperand: Double?, val pendingOp: Char?)
@@ -571,6 +584,10 @@ class CalculatorViewModel(application: Application) : AndroidViewModel(applicati
             }
             CalculatorAction.DecrLbPart -> {
                 _uiState.update { it.copy(stoneLbPart = (it.stoneLbPart - 1).coerceAtLeast(0)) }
+                updateDisplay(); return
+            }
+            CalculatorAction.ToggleDistanceLitres -> {
+                _uiState.update { it.copy(distanceUseLitres = !it.distanceUseLitres) }
                 updateDisplay(); return
             }
             is CalculatorAction.SetEnabledDistancePairs -> {
@@ -1166,9 +1183,11 @@ class CalculatorViewModel(application: Application) : AndroidViewModel(applicati
             }
             return
         }
-        val fromAbbr = if (s.distanceReversed) pair.toAbbr   else pair.fromAbbr
-        val toAbbr   = if (s.distanceReversed) pair.fromAbbr else pair.toAbbr
-        val factor   = if (s.distanceReversed) 1.0 / pair.factor else pair.factor
+        val useLitres = s.distanceUseLitres && pair.toAbbr == "ml"
+        val baseFactor = if (useLitres) pair.factor / 1000.0 else pair.factor
+        val fromAbbr = if (s.distanceReversed) (if (useLitres) "L" else pair.toAbbr) else pair.fromAbbr
+        val toAbbr   = if (s.distanceReversed) pair.fromAbbr else (if (useLitres) "L" else pair.toAbbr)
+        val factor   = if (s.distanceReversed) 1.0 / baseFactor else baseFactor
         val converted = value * factor
         _uiState.update {
             it.copy(
