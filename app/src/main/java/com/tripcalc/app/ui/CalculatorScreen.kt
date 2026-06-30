@@ -2302,13 +2302,25 @@ fun HelpScreen(modifier: Modifier = Modifier) {
             HelpItem("UK vs US gallons", "Toggle between UK imperial gallons and US gallons in Settings → Fuel (mpg mode only).")
         }
 
-        HelpSection("Distance Converter") {
-            HelpItem("Converting", "Enter a distance in the From unit; the To unit updates live. Tap ⇄ to swap direction.")
-            HelpItem("Additional Pairs", "Enable or disable additional units (miles↔km, inch↔cm, feet↔metre, SqFeet↔SqMetre) in Settings → Distance.")
+        HelpSection("Units Converter") {
+            HelpItem("Converting", "Enter a value in the From unit; the To unit updates live. Tap ⇄ to swap direction.")
+            HelpItem("Choosing a conversion", "Use the dropdown to pick from distance, volume, weight, speed, pressure, and energy conversions.")
+            HelpItem("Stone + lb", "For Stone ↔ kg, the main keypad enters stone and the − / + buttons adjust the remaining pounds (0–13).")
+            HelpItem("Litres toggle", "For conversions that output millilitres, a toggle switches the result to litres instead.")
+            HelpItem("Enabling pairs", "Show or hide individual unit pairs in Settings → Unit converter pairs.")
         }
 
         HelpSection("Temperature Converter") {
             HelpItem("Units", "Converts between °C and °F. Tap ⇄ to swap direction.")
+        }
+
+        HelpSection("Local Info") {
+            HelpItem("Opening it", "Tap the menu (☰) → Local Info.")
+            HelpItem("Selecting a country", "Tap the country button at the top to open the picker. Recent selections appear at the top of the list; you can also search by name.")
+            HelpItem("What's shown", "Essentials (emergency number, calling code, currency, languages), Driving (side of road, speed limits, drink-drive BAC limit), and Practical (tap water safety, plug type and voltage, alcohol purchase age).")
+            HelpItem("Data sources", "Driving side and emergency numbers come from Wikidata (CC0 licence, fetched live and cached for 7 days). Calling code, currency and languages come from restcountries.com. Speed limits, BAC, plug types and tap water safety are bundled static data.")
+            HelpItem("Disclaimer", "Information is for general guidance only. Laws and regulations change — always verify with official local sources before travelling.")
+            HelpItem("Refresh", "Tap the refresh icon next to the country name to force a fresh fetch from the APIs.")
         }
 
         HelpSection("Size Converter") {
@@ -2328,7 +2340,7 @@ fun HelpScreen(modifier: Modifier = Modifier) {
         HelpSection("Settings") {
             HelpItem("Appearance", "Choose light, dark, or system theme, and pick an accent colour.")
             HelpItem("Haptics", "Toggle vibration feedback on button presses.")
-            HelpItem("Tab visibility", "Show or hide individual calculator tabs (Tip, Fuel, Distance, Temperature) to keep the tab bar uncluttered.")
+            HelpItem("Tab visibility", "Show or hide individual calculator tabs (Tip, Units, Fuel, Temperature) to keep the tab bar uncluttered.")
             HelpItem("Default tip %", "Sets the tip percentage pre-selected when you open the Tip tab.")
         }
 

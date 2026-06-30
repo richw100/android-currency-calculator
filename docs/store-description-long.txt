@@ -1,6 +1,6 @@
 TripCalc — the calculator built for travel.
 
-Your travel companion for money and more. Live currency conversion across 161 currencies, a receipt scanner that converts prices on the spot, card fee profiles so you always know what you'll actually pay, plus a tip calculator, fuel converter, distance and temperature tools, and an international clothing and shoe size guide — everything you need when you're away from home.
+Your travel companion for money and more. Live currency conversion across 161 currencies, a receipt scanner that converts prices on the spot, card fee profiles so you always know what you'll actually pay, plus a tip calculator, fuel converter, unit and temperature tools, an international clothing and shoe size guide, and a Local Info screen with country-level practical information — everything you need when you're away from home.
 
 No ads. No account. No tracking.
 
@@ -30,14 +30,33 @@ TIP & BILL SPLITTING
 Enter the bill, choose your tip percentage (or set a custom one), and split it however many ways you need. One tap sends the total straight to the currency converter — so you always know what you're paying in your home currency.
 
 
+LOCAL INFO
+
+Look up practical travel information for over 80 countries. Select any country to instantly see:
+
+• Emergency numbers and international calling code
+• Local currency and official languages
+• Which side of the road they drive on
+• Speed limits (urban, rural, motorway) — shown in mph or km/h as appropriate
+• Drink-drive BAC limit
+• Tap water safety
+• Plug type, voltage and frequency
+• Minimum alcohol purchase age
+
+Driving side and emergency numbers are sourced live from Wikidata (CC0). Calling code, currency and languages come from restcountries.com. All data includes a disclaimer — always verify locally before travelling.
+
+
 UNIT CONVERSIONS
 
-• Miles ↔ Kilometres
-• Inches ↔ Centimetres
-• Feet ↔ Metres
-• Square feet ↔ Square metres
+A grouped dropdown covers distance, volume, weight, speed, pressure and energy:
+
+• Miles ↔ Kilometres, Feet ↔ Metres, Inches ↔ Centimetres, Yards ↔ Metres
+• Square feet ↔ Square metres, Acres ↔ Hectares
+• UK/US Pint, Gallon ↔ Litres/ml, Fluid oz ↔ ml, US Cup ↔ ml
+• Stone+lb ↔ kg (compound entry), Pounds ↔ kg, Ounces ↔ g
+• mph ↔ km/h, PSI ↔ Bar, kcal ↔ kJ
 • Celsius ↔ Fahrenheit
-• MPG (UK or US) ↔ Litres per 100km
+• MPG (UK or US) ↔ Litres per 100km, mi/kWh ↔ kWh/100km
 
 
 CLOTHING & SHOE SIZE CONVERTER
@@ -61,9 +80,10 @@ FEATURES AT A GLANCE
 • Live rates for 161 currencies, refreshed every 24 hours
 • Card fee profiles with minimum fee support and per-card rates
 • Tip calculator with bill splitting and FX hand-off
+• Local Info for 80+ countries — speed limits, BAC, plug types, tap water, emergency numbers
+• Comprehensive unit converter — distance, volume, weight, speed, pressure, energy
 • International clothing and shoe size converter
-• Miles ↔ km, inches ↔ cm, feet ↔ m, sq ft ↔ sq m
-• °C ↔ °F, MPG ↔ L/100km
+• °C ↔ °F, MPG ↔ L/100km, mi/kWh ↔ kWh/100km
 • Full calculator with brackets and percentage
 • Calculation history with notes — tap any entry to restore it
 • Custom exchange rates
