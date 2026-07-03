@@ -122,7 +122,8 @@
   <li>Receipt scanner — ML Kit OCR reads prices from a photo; tap any number to overlay its converted value directly on top of the original; multi-select builds a running total</li>
   <li>Card fee profiles — named profiles with per-cent fee, minimum charge, and per-card exchange rate overrides</li>
   <li>Tip calculator with bill splitting and FX hand-off</li>
-  <li>Unit converters: distance, temperature, fuel economy, clothing and shoe sizes</li>
+  <li>Local Info screen — emergency numbers, calling codes, currency, languages, driving side, speed limits (mph or km/h), BAC limit, tap water safety, plug type/voltage for 80+ countries</li>
+  <li>Unit converters: distance, volume, weight, speed, pressure, energy, temperature, fuel economy, clothing and shoe sizes</li>
 </ul>
 
 <h3>Technology choices</h3>
@@ -197,15 +198,21 @@
             │   └── values/
             │       ├── strings.xml          # String resources
             │       └── themes.xml           # Legacy theme (Compose mostly ignores this)
-            └── java/com/example/calcapp/
+            └── java/com/tripcalc/app/
                 ├── MainActivity.kt          # Entry point
                 ├── ui/
-                │   ├── CalculatorScreen.kt  # All UI code
-                │   ├── CalculatorViewModel.kt  # State + logic
-                │   └── theme/Theme.kt       # Material3 colour theme
+                │   ├── AppTheme.kt          # Colour system (LocalAppColors, AppColors, AccentScheme)
+                │   ├── CalculatorScreen.kt  # Root UI, tab navigation, receipt scanner
+                │   ├── CalculatorViewModel.kt  # State + logic (CalculatorUiState, CalculatorAction)
+                │   ├── HistoryScreen.kt     # Calculation history list
+                │   ├── LocalisationScreen.kt   # Local Info screen
+                │   ├── SettingsScreen.kt    # Appearance, haptic, custom rates, card profiles
+                │   └── theme/Theme.kt       # Material3 colour scheme
                 └── data/
-                    ├── ExchangeRateApi.kt         # HTTP API interface
-                    └── ExchangeRateRepository.kt  # Cache + persistence</code></pre>
+                    ├── ExchangeRateApi.kt          # Retrofit interface + response model
+                    ├── ExchangeRateRepository.kt   # Fetch/cache rates + persist all prefs
+                    ├── LocalisationData.kt         # Static plug types, tap water, driving data
+                    └── LocalisationRepository.kt   # Wikidata + REST Countries fetch + cache</code></pre>
 
 <div class="callout analogy">
   <strong>CMake analogy:</strong> <code>settings.gradle.kts</code> is like your top-level <code>CMakeLists.txt</code> that calls <code>add_subdirectory(app)</code>. Each module (<code>app/</code>) has its own <code>build.gradle.kts</code>, like a subdirectory <code>CMakeLists.txt</code>.
@@ -534,6 +541,36 @@ val toName   = JavaCurrency.getInstance(toCode).displayName    // e.g. "Euro"
 val rateLabel = "1 $fromCode ($fromName) = ${"%.4f".format(toRate / fromRate)} $toCode ($toName)"
 // → "1 GBP (British Pound Sterling) = 1.1732 EUR (Euro)"</code></pre>
 
+<h3><span class="file-header">data/LocalisationData.kt</span></h3>
+<p>Static compile-time maps for country-level travel data. Contains three top-level maps:</p>
+<ul>
+  <li><code>PLUG_TYPES: Map&lt;String, PlugInfo&gt;</code> — plug type string (e.g. "Type G"), voltage, and frequency for ~80 countries</li>
+  <li><code>TAP_WATER_SAFE: Map&lt;String, Boolean&gt;</code> — whether tap water is generally safe to drink</li>
+  <li><code>DRIVING_INFO: Map&lt;String, DrivingInfo&gt;</code> — urban/rural/motorway speed limits, BAC limit, alcohol purchase age, and speed unit ("mph" or "km/h")</li>
+</ul>
+<p>Also exports <code>COUNTRY_LIST: List&lt;Pair&lt;String, String&gt;&gt;</code> — the curated list of ~80 ISO alpha-2 codes + display names shown in the country picker, and <code>fun plugTypeDescription(type: String): String</code> which expands a plug type code like "Type C/F" into a human-readable description.</p>
+<p>Static data is always read directly from these maps at display time, never cached — so app updates take effect immediately without a cache bust.</p>
+
+<h3><span class="file-header">data/LocalisationRepository.kt</span></h3>
+<p>Fetches and caches per-country info from two external APIs, merged with static data:</p>
+<ul>
+  <li><strong>Wikidata SPARQL</strong> (<code>query.wikidata.org/sparql</code>) — driving side (P1622) and all emergency numbers (P2852) for the country. Results are returned as label strings via <code>SERVICE wikibase:label</code>.</li>
+  <li><strong>REST Countries</strong> (<code>restcountries.com/v3.1/alpha/{code}</code>) — international calling code (idd.root + idd.suffixes[0]), currency names, and official languages.</li>
+</ul>
+<p>Both calls fire in parallel with <code>async { } + await()</code>. Results are merged into a <code>CountryLocalisationInfo</code> object, serialised with Gson, and saved to a separate DataStore named <code>"localisation_data"</code> (must not share the delegate with <code>"exchange_rates"</code>). Cache TTL is 7 days.</p>
+<p>On network failure the cached value is returned if available; otherwise a stub with only static data is returned and <code>localisationError</code> is set in the ViewModel. Recent country selections (up to 5) are also persisted here as a comma-separated string.</p>
+
+<h3><span class="file-header">ui/LocalisationScreen.kt</span></h3>
+<p>The Local Info screen. Layout: a scrollable column of info cards with a pinned disclaimer footer below the scroll area.</p>
+<ul>
+  <li><strong>Country picker button</strong> — shows flag emoji + country name; opens <code>CountryPickerDialog</code> (Dialog + LazyColumn, never DropdownMenu + LazyColumn to avoid nested-scroll crash)</li>
+  <li><strong>Essentials card</strong> — emergency numbers, calling code, currency, languages (API data)</li>
+  <li><strong>Driving card</strong> — driving side (API), speed limits table with mph/km/h unit from static data, BAC limit ("Zero tolerance" when 0.00%)</li>
+  <li><strong>Practical card</strong> — tap water safety (colour-coded), plug type + description + worldstandards.eu link, voltage/frequency, alcohol purchase age</li>
+</ul>
+<p>Static fields (plug, tap water, driving) are always read from the bundled maps, not from the cached <code>CountryLocalisationInfo</code>, so Gson's null-for-missing-fields behaviour cannot cause stale or null speed units.</p>
+<p>The country picker shows a "Recent" section (last 5 selections) above the full list when not searching. <code>InfoRow</code> uses <code>weight(1f)</code> for the label and <code>weight(2f)</code> for the value, with <code>maxLines = 1, overflow = Ellipsis</code> on the value.</p>
+
 <h3><span class="file-header">ui/HistoryScreen.kt</span></h3>
 <p>A scrollable list of saved conversions (up to 50 entries). Tapping any entry restores the currencies and amount to the calculator. A notes icon on each row opens an edit dialog so the user can label what a conversion was for. History is persisted as a JSON array in DataStore.</p>
 
@@ -780,7 +817,7 @@ app/build/outputs/apk/debug/app-debug.apk
 <p>DataStore works well for simple key-value data but is awkward for a growing list. For calculation history, consider Room (Android's SQLite ORM). Add the Room dependency, create an <code>Entity</code> data class, a <code>Dao</code> interface, and a <code>Database</code> class. The repository pattern already isolates the rest of the app from storage details — add a <code>HistoryRepository</code> alongside the existing <code>ExchangeRateRepository</code>.</p>
 
 <hr style="margin: 40px 0 24px; border: none; border-top: 1px solid #ddd;">
-<p style="color: #999; font-size: 12px; text-align: center;">CalcApp Developer Guide · Updated June 2026</p>
+<p style="color: #999; font-size: 12px; text-align: center;">CalcApp Developer Guide · Updated July 2026</p>
 
 </body>
 </html>
