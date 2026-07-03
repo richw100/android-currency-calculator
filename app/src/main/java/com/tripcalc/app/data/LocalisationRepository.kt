@@ -70,6 +70,8 @@ class LocalisationRepository(private val context: Context) {
     }
 
     suspend fun getCountryInfo(code: String, forceRefresh: Boolean = false): CountryLocalisationInfo {
+        // Codes are interpolated into the SPARQL query and URL path — only ISO alpha-2 allowed
+        if (!code.matches(Regex("[A-Z]{2}"))) return buildStubInfo(code)
         if (!forceRefresh) {
             val cached = loadCached(code)
             if (cached != null && System.currentTimeMillis() - cached.fetchedAt < LOCALISATION_CACHE_TTL_MS) {

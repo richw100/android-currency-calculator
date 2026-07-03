@@ -70,7 +70,7 @@ dependencies {
     implementation(libs.androidx.compose.material.icons)
     implementation(libs.retrofit)
     implementation(libs.retrofit.gson)
-    implementation(libs.okhttp.logging)
+    implementation(libs.okhttp)
     implementation(libs.datastore.preferences)
     implementation(libs.kotlinx.coroutines.android)
     implementation(libs.gson)

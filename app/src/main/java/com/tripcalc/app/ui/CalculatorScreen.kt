@@ -181,6 +181,7 @@ fun AppScreen() {
     val context = LocalContext.current
     var ocrBitmap by remember { mutableStateOf<Bitmap?>(null) }
     var cameraImageUri by remember { mutableStateOf<Uri?>(null) }
+    var cameraImageFile by remember { mutableStateOf<File?>(null) }
     var showOcrSourceSheet by remember { mutableStateOf(false) }
 
     val galleryLauncher = rememberLauncherForActivityResult(ActivityResultContracts.GetContent()) { uri ->
@@ -197,11 +198,17 @@ fun AppScreen() {
                 if (bmp != null) { ocrBitmap = bmp; screen = Screen.OcrOverlay }
             }
         }
+        // Receipt photo is only needed to decode the bitmap — don't leave it in cache
+        cameraImageFile?.delete()
+        cameraImageFile = null
+        cameraImageUri = null
     }
     val cameraPermissionLauncher = rememberLauncherForActivityResult(ActivityResultContracts.RequestPermission()) { granted ->
         if (granted) {
-            val file = File.createTempFile("ocr_", ".jpg", context.cacheDir)
+            val cameraDir = File(context.cacheDir, "camera").apply { mkdirs() }
+            val file = File.createTempFile("ocr_", ".jpg", cameraDir)
             val uri = FileProvider.getUriForFile(context, "${context.packageName}.provider", file)
+            cameraImageFile = file
             cameraImageUri = uri
             cameraLauncher.launch(uri)
         } else {
@@ -333,9 +340,13 @@ fun AppScreen() {
                                 bitmap = bmp,
                                 uiState = state,
                                 modifier = Modifier.weight(1f),
-                                onUseAmount = { amount, mode ->
+                                onUseAmount = { amount, mode, taxAlreadyAdded ->
                                     vm.onAction(CalculatorAction.SetConversionMode(mode))
                                     vm.onAction(CalculatorAction.PasteValue(amount))
+                                    // Value already includes sales tax — don't add it again in tip mode
+                                    if (mode == ConversionMode.TIP && taxAlreadyAdded) {
+                                        vm.onAction(CalculatorAction.SetTaxApplied(false))
+                                    }
                                     screen = Screen.Calculator
                                 },
                                 onToggleOcrConvert = {
@@ -498,20 +509,6 @@ fun AboutScreen(modifier: Modifier = Modifier) {
             border = androidx.compose.foundation.BorderStroke(1.dp, colors.divider)
         ) {
             Text("Privacy policy", fontSize = 15.sp, modifier = Modifier.padding(vertical = 4.dp))
-        }
-
-        Spacer(Modifier.height(12.dp))
-
-        OutlinedButton(
-            onClick = {
-                context.startActivity(Intent(Intent.ACTION_VIEW, Uri.parse("https://github.com/richw100/android-currency-calculator")))
-            },
-            modifier = Modifier.fillMaxWidth(),
-            shape = RoundedCornerShape(10.dp),
-            colors = ButtonDefaults.outlinedButtonColors(contentColor = colors.textSecondary),
-            border = androidx.compose.foundation.BorderStroke(1.dp, colors.divider)
-        ) {
-            Text("View on GitHub", fontSize = 15.sp, modifier = Modifier.padding(vertical = 4.dp))
         }
 
         Spacer(Modifier.height(24.dp))
@@ -2380,7 +2377,7 @@ private fun OcrOverlayScreen(
     bitmap: Bitmap,
     uiState: CalculatorUiState,
     modifier: Modifier = Modifier,
-    onUseAmount: (String, ConversionMode) -> Unit,
+    onUseAmount: (String, ConversionMode, Boolean) -> Unit,
     onToggleOcrConvert: () -> Unit,
     onClose: () -> Unit
 ) {
@@ -2389,6 +2386,7 @@ private fun OcrOverlayScreen(
     var isLoading by remember { mutableStateOf(true) }
     var lastTappedValue by remember { mutableStateOf<String?>(null) }
     var pendingValue by remember { mutableStateOf<String?>(null) }
+    var pendingValueHasTax by remember { mutableStateOf(false) }
     var zoom by remember { mutableStateOf(1f) }
     var panOffset by remember { mutableStateOf(Offset.Zero) }
     var detectedReceiptCurrency by remember { mutableStateOf<String?>(null) }
@@ -2702,8 +2700,9 @@ private fun OcrOverlayScreen(
 
         // Bottom bar — only shown when items are selected
         if (selectedItems.isNotEmpty()) {
-            val adjustedTotal = if (ocrTaxApplied && ocrTaxInfo != null && !ocrTaxInfo.includedInPrice) {
-                selectedTotal * (1.0 + ocrTaxInfo.standardRate / 100.0)
+            val taxWasAdded = ocrTaxApplied && ocrTaxInfo != null && !ocrTaxInfo.includedInPrice
+            val adjustedTotal = if (taxWasAdded) {
+                selectedTotal * (1.0 + ocrTaxInfo!!.standardRate / 100.0)
             } else selectedTotal
             val totalStr = if (adjustedTotal == kotlin.math.floor(adjustedTotal))
                 adjustedTotal.toLong().toString() else "%.2f".format(adjustedTotal)
@@ -2767,7 +2766,7 @@ private fun OcrOverlayScreen(
                     val useVal = lastTappedValue
                     if (useVal != null) {
                         Button(
-                            onClick = { pendingValue = useVal },
+                            onClick = { pendingValue = useVal; pendingValueHasTax = false },
                             colors = ButtonDefaults.buttonColors(containerColor = colors.surface)
                         ) {
                             Text("Use $useVal", color = colors.textPrimary, fontWeight = FontWeight.Bold)
@@ -2781,7 +2780,7 @@ private fun OcrOverlayScreen(
                         convertedTotal.toLong().toString() else "%.2f".format(convertedTotal)
                     Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                         Button(
-                            onClick = { pendingValue = totalStr },
+                            onClick = { pendingValue = totalStr; pendingValueHasTax = taxWasAdded },
                             modifier = Modifier.weight(1f),
                             colors = ButtonDefaults.buttonColors(containerColor = colors.surface)
                         ) {
@@ -2790,7 +2789,7 @@ private fun OcrOverlayScreen(
                                 maxLines = 1, overflow = TextOverflow.Ellipsis)
                         }
                         Button(
-                            onClick = { pendingValue = convertedStr },
+                            onClick = { pendingValue = convertedStr; pendingValueHasTax = taxWasAdded },
                             modifier = Modifier.weight(1f),
                             colors = ButtonDefaults.buttonColors(containerColor = colors.equals)
                         ) {
@@ -2801,7 +2800,7 @@ private fun OcrOverlayScreen(
                     }
                 } else {
                     Button(
-                        onClick = { pendingValue = totalStr },
+                        onClick = { pendingValue = totalStr; pendingValueHasTax = taxWasAdded },
                         modifier = Modifier.fillMaxWidth(),
                         colors = ButtonDefaults.buttonColors(containerColor = colors.equals)
                     ) {
@@ -2822,7 +2821,7 @@ private fun OcrOverlayScreen(
                             fontSize = 16.sp, fontWeight = FontWeight.Medium)
                         Spacer(Modifier.height(16.dp))
                         Button(
-                            onClick = { onUseAmount(pv, ConversionMode.CURRENCY); pendingValue = null },
+                            onClick = { onUseAmount(pv, ConversionMode.CURRENCY, pendingValueHasTax); pendingValue = null },
                             modifier = Modifier.fillMaxWidth(),
                             colors = ButtonDefaults.buttonColors(containerColor = colors.equals)
                         ) {
@@ -2830,7 +2829,7 @@ private fun OcrOverlayScreen(
                         }
                         Spacer(Modifier.height(8.dp))
                         Button(
-                            onClick = { onUseAmount(pv, ConversionMode.TIP); pendingValue = null },
+                            onClick = { onUseAmount(pv, ConversionMode.TIP, pendingValueHasTax); pendingValue = null },
                             modifier = Modifier.fillMaxWidth(),
                             colors = ButtonDefaults.buttonColors(containerColor = colors.operator)
                         ) {
