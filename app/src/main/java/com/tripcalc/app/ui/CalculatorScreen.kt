@@ -1,11 +1,17 @@
 package com.tripcalc.app.ui
 
+import android.content.ContentValues
 import android.content.Intent
 import android.graphics.Bitmap
 import android.graphics.BitmapFactory
+import android.graphics.Canvas as AndroidCanvas
 import android.graphics.Matrix
+import android.graphics.Paint
 import android.graphics.Rect as AndroidRect
+import android.graphics.Typeface
 import android.media.ExifInterface
+import android.os.Environment
+import android.provider.MediaStore
 import android.net.Uri
 import android.widget.Toast
 import androidx.activity.compose.BackHandler
@@ -43,6 +49,7 @@ import androidx.compose.material.icons.filled.Settings
 import androidx.compose.material.icons.filled.SwapHoriz
 import androidx.compose.material.icons.filled.Checkroom
 import androidx.compose.material.icons.filled.Edit
+import androidx.compose.material.icons.filled.SaveAlt
 import androidx.compose.material.icons.filled.WifiOff
 import androidx.compose.material.icons.filled.ArrowDropDown
 import androidx.compose.material3.*
@@ -51,6 +58,10 @@ import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.draw.drawWithContent
+import androidx.compose.ui.graphics.asAndroidBitmap
+import androidx.compose.ui.graphics.layer.drawLayer
+import androidx.compose.ui.graphics.rememberGraphicsLayer
 import androidx.compose.ui.geometry.CornerRadius
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.geometry.Size
@@ -90,10 +101,14 @@ import com.google.mlkit.vision.common.InputImage
 import com.google.mlkit.vision.text.TextRecognition
 import com.google.mlkit.vision.text.latin.TextRecognizerOptions
 import java.io.File
+import java.text.SimpleDateFormat
+import java.util.Date
 import kotlin.math.abs
 import kotlin.math.min
 import kotlin.math.roundToInt
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.viewmodel.compose.viewModel
 import com.tripcalc.app.BuildConfig
@@ -171,6 +186,61 @@ private fun loadOrientedBitmap(context: android.content.Context, uri: Uri): Bitm
     if (rotation == 0f) return bitmap
     val m = Matrix().apply { postRotate(rotation) }
     return Bitmap.createBitmap(bitmap, 0, 0, bitmap.width, bitmap.height, m, true)
+}
+
+// Saves the captured receipt view (plus an optional totals footer) as a JPEG.
+// API 29+ writes to the shared gallery via MediaStore — no permission needed;
+// older versions have no permissionless gallery write, so they fall back to
+// the app's own external Pictures folder.
+private fun saveReceiptScreenshot(
+    context: android.content.Context,
+    shot: Bitmap,
+    footerLines: List<Pair<String, Int>>
+): Boolean {
+    return try {
+        val textSize = shot.width / 24f
+        val lineHeight = textSize * 1.4f
+        val padding = shot.width / 30f
+        val footerHeight = if (footerLines.isEmpty()) 0 else (footerLines.size * lineHeight + padding).toInt()
+        val composed = Bitmap.createBitmap(shot.width, shot.height + footerHeight, Bitmap.Config.ARGB_8888)
+        val canvas = AndroidCanvas(composed)
+        canvas.drawColor(android.graphics.Color.BLACK)
+        canvas.drawBitmap(shot, 0f, 0f, null)
+        val paint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
+            this.textSize = textSize
+            typeface = Typeface.DEFAULT_BOLD
+        }
+        footerLines.forEachIndexed { i, (text, colour) ->
+            paint.color = colour
+            canvas.drawText(text, padding, shot.height + padding / 2f + textSize + i * lineHeight, paint)
+        }
+
+        val filename = "TripCalc_${SimpleDateFormat("yyyyMMdd_HHmmss", Locale.US).format(Date())}.jpg"
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
+            val resolver = context.contentResolver
+            val values = ContentValues().apply {
+                put(MediaStore.Images.Media.DISPLAY_NAME, filename)
+                put(MediaStore.Images.Media.MIME_TYPE, "image/jpeg")
+                put(MediaStore.Images.Media.RELATIVE_PATH, "Pictures/TripCalc")
+                put(MediaStore.Images.Media.IS_PENDING, 1)
+            }
+            val uri = resolver.insert(MediaStore.Images.Media.EXTERNAL_CONTENT_URI, values) ?: return false
+            resolver.openOutputStream(uri)?.use { stream ->
+                composed.compress(Bitmap.CompressFormat.JPEG, 90, stream)
+            } ?: return false
+            values.clear()
+            values.put(MediaStore.Images.Media.IS_PENDING, 0)
+            resolver.update(uri, values, null, null)
+        } else {
+            val dir = context.getExternalFilesDir(Environment.DIRECTORY_PICTURES) ?: return false
+            File(dir, filename).outputStream().use { stream ->
+                composed.compress(Bitmap.CompressFormat.JPEG, 90, stream)
+            }
+        }
+        true
+    } catch (e: Exception) {
+        false
+    }
 }
 
 @OptIn(ExperimentalMaterial3Api::class, ExperimentalFoundationApi::class)
@@ -2419,6 +2489,11 @@ private fun OcrOverlayScreen(
     val ocrConvertEnabled = uiState.ocrConvertEnabled
     var ocrTaxApplied by remember { mutableStateOf(false) }
     val ocrTaxInfo = uiState.currentTaxInfo.takeIf { uiState.taxEnabled }
+    val context = LocalContext.current
+    val scope = rememberCoroutineScope()
+    // Records the image area (receipt + boxes + bubbles at the current zoom) so the
+    // save button can export it as a picture
+    val captureLayer = rememberGraphicsLayer()
 
     BackHandler { onClose() }
 
@@ -2583,10 +2658,47 @@ private fun OcrOverlayScreen(
                     fontWeight = FontWeight.Medium
                 )
             }
+            IconButton(
+                onClick = {
+                    scope.launch {
+                        val shot = runCatching { captureLayer.toImageBitmap().asAndroidBitmap() }.getOrNull()
+                        val footer: List<Pair<String, Int>> = if (selectedItems.isEmpty()) emptyList() else buildList {
+                            val receiptSym = currencySymbol(detectedReceiptCurrency ?: fromCurrency)
+                            add("Selected: $receiptSym${"%.2f".format(Locale.US, selectedTotal)}" to 0xFFFFFFFF.toInt())
+                            val taxAdded = ocrTaxApplied && ocrTaxInfo != null && !ocrTaxInfo.includedInPrice
+                            val total = if (taxAdded) selectedTotal * (1.0 + ocrTaxInfo!!.standardRate / 100.0) else selectedTotal
+                            if (taxAdded) add("+ tax: $receiptSym${"%.2f".format(Locale.US, total)}" to 0xFF34C759.toInt())
+                            if (ocrConvertEnabled && exchangeRate != null) {
+                                add("= ${currencySymbol(toCurrency)}${"%.2f".format(Locale.US, total * exchangeRate)}" to 0xFFFFD700.toInt())
+                            }
+                        }
+                        val saved = shot != null && withContext(Dispatchers.IO) {
+                            saveReceiptScreenshot(context, shot, footer)
+                        }
+                        Toast.makeText(
+                            context,
+                            if (saved) "Saved to Pictures/TripCalc" else "Couldn't save screenshot",
+                            Toast.LENGTH_SHORT
+                        ).show()
+                    }
+                },
+                enabled = !isLoading
+            ) {
+                Icon(Icons.Default.SaveAlt, contentDescription = "Save screenshot", tint = Color.White)
+            }
         }
 
         // Image + overlay
-        Box(modifier = Modifier.weight(1f).fillMaxWidth()) {
+        Box(
+            modifier = Modifier
+                .weight(1f)
+                .fillMaxWidth()
+                .background(Color.Black)
+                .drawWithContent {
+                    captureLayer.record { this@drawWithContent.drawContent() }
+                    drawLayer(captureLayer)
+                }
+        ) {
             if (isLoading) {
                 CircularProgressIndicator(modifier = Modifier.align(Alignment.Center), color = Color.White)
             } else {
