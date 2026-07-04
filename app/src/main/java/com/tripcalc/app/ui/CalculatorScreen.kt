@@ -47,6 +47,7 @@ import androidx.compose.material.icons.filled.WifiOff
 import androidx.compose.material.icons.filled.ArrowDropDown
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
+import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -61,6 +62,7 @@ import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.layout.layout
 import androidx.compose.ui.unit.IntOffset
 import java.util.Currency as JavaCurrency
+import java.util.Locale
 import android.os.Build
 import android.os.VibrationEffect
 import android.os.Vibrator
@@ -101,13 +103,18 @@ import com.tripcalc.app.data.US_STATE_TAX_RATES
 import androidx.compose.material.icons.filled.Public
 import com.tripcalc.app.ui.theme.CalcAppTheme
 
+private val isoCountryCodes: Set<String> by lazy { java.util.Locale.getISOCountries().toSet() }
+
 fun currencyFlag(code: String): String {
     val countryCode = when (code) {
         "EUR" -> "EU"
-        else -> code.take(2)
+        else -> code.take(2).uppercase()
     }
+    // Supranational codes (XAF, XDR, …) have no flag — regional indicators for them
+    // render as broken letter glyphs, so show nothing instead
+    if (countryCode != "EU" && countryCode !in isoCountryCodes) return ""
     return try {
-        countryCode.uppercase().map { char ->
+        countryCode.map { char ->
             String(Character.toChars(char.code - 'A'.code + 0x1F1E6))
         }.joinToString("")
     } catch (e: Exception) { "" }
@@ -137,9 +144,20 @@ private data class DetectedNumber(
     val selected: Boolean = false
 )
 
+// Longest side after decode — high-res camera photos decoded at full size can OOM,
+// and ML Kit OCR doesn't need more than this
+private const val MAX_OCR_IMAGE_DIMENSION = 2560
+
 private fun loadOrientedBitmap(context: android.content.Context, uri: Uri): Bitmap? {
+    val bounds = BitmapFactory.Options().apply { inJustDecodeBounds = true }
+    context.contentResolver.openInputStream(uri)
+        ?.use { BitmapFactory.decodeStream(it, null, bounds) } ?: return null
+    if (bounds.outWidth <= 0 || bounds.outHeight <= 0) return null
+    var sampleSize = 1
+    while (maxOf(bounds.outWidth, bounds.outHeight) / sampleSize > MAX_OCR_IMAGE_DIMENSION) sampleSize *= 2
+    val opts = BitmapFactory.Options().apply { inSampleSize = sampleSize }
     val bitmap = context.contentResolver.openInputStream(uri)
-        ?.use { BitmapFactory.decodeStream(it) } ?: return null
+        ?.use { BitmapFactory.decodeStream(it, null, opts) } ?: return null
     val rotation = context.contentResolver.openInputStream(uri)?.use { stream ->
         val exif = ExifInterface(stream)
         when (exif.getAttributeInt(ExifInterface.TAG_ORIENTATION, ExifInterface.ORIENTATION_NORMAL)) {
@@ -157,7 +175,7 @@ private fun loadOrientedBitmap(context: android.content.Context, uri: Uri): Bitm
 @OptIn(ExperimentalMaterial3Api::class, ExperimentalFoundationApi::class)
 @Composable
 fun AppScreen() {
-    var screen by remember { mutableStateOf(Screen.Calculator) }
+    var screen by rememberSaveable { mutableStateOf(Screen.Calculator) }
     var menuExpanded by remember { mutableStateOf(false) }
     val vm: CalculatorViewModel = viewModel()
     val state by vm.uiState.collectAsStateWithLifecycle()
@@ -179,15 +197,16 @@ fun AppScreen() {
     }
 
     val context = LocalContext.current
-    var ocrBitmap by remember { mutableStateOf<Bitmap?>(null) }
-    var cameraImageUri by remember { mutableStateOf<Uri?>(null) }
-    var cameraImageFile by remember { mutableStateOf<File?>(null) }
+    // Uri/path survive Activity recreation (rotation, or the process being reclaimed
+    // while the camera app is in the foreground) so the photo result isn't lost
+    var cameraImageUri by rememberSaveable { mutableStateOf<Uri?>(null) }
+    var cameraImagePath by rememberSaveable { mutableStateOf<String?>(null) }
     var showOcrSourceSheet by remember { mutableStateOf(false) }
 
     val galleryLauncher = rememberLauncherForActivityResult(ActivityResultContracts.GetContent()) { uri ->
         if (uri != null) {
             val bmp = loadOrientedBitmap(context, uri)
-            if (bmp != null) { ocrBitmap = bmp; screen = Screen.OcrOverlay }
+            if (bmp != null) { vm.ocrBitmap = bmp; screen = Screen.OcrOverlay }
         }
     }
     val cameraLauncher = rememberLauncherForActivityResult(ActivityResultContracts.TakePicture()) { success ->
@@ -195,12 +214,12 @@ fun AppScreen() {
             val uri = cameraImageUri
             if (uri != null) {
                 val bmp = loadOrientedBitmap(context, uri)
-                if (bmp != null) { ocrBitmap = bmp; screen = Screen.OcrOverlay }
+                if (bmp != null) { vm.ocrBitmap = bmp; screen = Screen.OcrOverlay }
             }
         }
         // Receipt photo is only needed to decode the bitmap — don't leave it in cache
-        cameraImageFile?.delete()
-        cameraImageFile = null
+        cameraImagePath?.let { File(it).delete() }
+        cameraImagePath = null
         cameraImageUri = null
     }
     val cameraPermissionLauncher = rememberLauncherForActivityResult(ActivityResultContracts.RequestPermission()) { granted ->
@@ -208,7 +227,7 @@ fun AppScreen() {
             val cameraDir = File(context.cacheDir, "camera").apply { mkdirs() }
             val file = File.createTempFile("ocr_", ".jpg", cameraDir)
             val uri = FileProvider.getUriForFile(context, "${context.packageName}.provider", file)
-            cameraImageFile = file
+            cameraImagePath = file.absolutePath
             cameraImageUri = uri
             cameraLauncher.launch(uri)
         } else {
@@ -334,7 +353,7 @@ fun AppScreen() {
                     Screen.Help         -> HelpScreen(modifier = Modifier.weight(1f))
                     Screen.Localisation -> LocalisationScreen(vm = vm, modifier = Modifier.weight(1f))
                     Screen.OcrOverlay -> {
-                        val bmp = ocrBitmap
+                        val bmp = vm.ocrBitmap
                         if (bmp != null) {
                             OcrOverlayScreen(
                                 bitmap = bmp,
@@ -347,14 +366,16 @@ fun AppScreen() {
                                     if (mode == ConversionMode.TIP && taxAlreadyAdded) {
                                         vm.onAction(CalculatorAction.SetTaxApplied(false))
                                     }
+                                    vm.ocrBitmap = null
                                     screen = Screen.Calculator
                                 },
                                 onToggleOcrConvert = {
                                     vm.onAction(CalculatorAction.SetOcrConvertEnabled(!state.ocrConvertEnabled))
                                 },
-                                onClose = { screen = Screen.Calculator }
+                                onClose = { vm.ocrBitmap = null; screen = Screen.Calculator }
                             )
                         } else {
+                            // Bitmap gone (process death) — fall back to the calculator
                             screen = Screen.Calculator
                         }
                     }
@@ -675,7 +696,7 @@ fun CalculatorScreen(vm: CalculatorViewModel = viewModel(), modifier: Modifier =
                     }
                     items(state.cardProfiles) { card ->
                         val feeLabel = if (card.markupPercent == 0.0) "0%"
-                            else "+${"%.2f".format(card.markupPercent).trimEnd('0').trimEnd('.')}%"
+                            else "+${"%.2f".format(Locale.US, card.markupPercent).trimEnd('0').trimEnd('.')}%"
                         FilterChip(
                             selected = state.activeCardId == card.id,
                             onClick = { vm.onAction(CalculatorAction.SetActiveCard(card.id)) },
@@ -717,8 +738,8 @@ fun CalculatorScreen(vm: CalculatorViewModel = viewModel(), modifier: Modifier =
                     val isAbove = pct >= 0
                     val liveRate = state.liveRates[state.fromCurrency]
                         ?.let { b -> state.liveRates[state.toCurrency]?.let { t -> if (b != 0.0) t / b else null } }
-                    val pctText = "${"%.2f".format(abs(pct))}% ${if (isAbove) "above" else "below"} live"
-                    val liveText = liveRate?.let { " (live: ${"%.4f".format(it)})" } ?: ""
+                    val pctText = "${"%.2f".format(Locale.US, abs(pct))}% ${if (isAbove) "above" else "below"} live"
+                    val liveText = liveRate?.let { " (live: ${"%.4f".format(Locale.US, it)})" } ?: ""
                     Text(
                         text = "$pctText$liveText",
                         color = if (isAbove) colors.positiveColor else colors.negativeColor,
@@ -850,9 +871,13 @@ fun CalculatorScreen(vm: CalculatorViewModel = viewModel(), modifier: Modifier =
                     overflow = TextOverflow.Ellipsis
                 )
             Box(modifier = Modifier.align(Alignment.TopEnd)) {
-                val clipText = clipboard.getText()?.text
-                val pasteNumber = remember(clipText) {
-                    clipText?.let { Regex("-?\\d+(?:[.,]\\d+)*(?:\\.\\d+)?").find(it)?.value?.replace(",", "") }
+                // Only touch the clipboard once the menu is open — reading it during
+                // composition fires Android 12+'s "app pasted from clipboard" notice
+                // on every recomposition
+                val pasteNumber = remember(displayMenuExpanded) {
+                    if (!displayMenuExpanded) null
+                    else clipboard.getText()?.text
+                        ?.let { Regex("-?\\d+(?:[.,]\\d+)*(?:\\.\\d+)?").find(it)?.value?.replace(",", "") }
                         ?.takeIf { it.toDoubleOrNull() != null }
                 }
                 DropdownMenu(expanded = displayMenuExpanded, onDismissRequest = { displayMenuExpanded = false }) {
@@ -1305,7 +1330,7 @@ private fun TipControlsRow(
         selectedLabelColor = colors.operatorContent
     )
 
-    fun formatPct(d: Double) = if (d == d.toLong().toDouble()) "${d.toLong()}%" else "${"%.1f".format(d)}%"
+    fun formatPct(d: Double) = if (d == d.toLong().toDouble()) "${d.toLong()}%" else "${"%.1f".format(Locale.US, d)}%"
 
     Column(
         modifier = Modifier
@@ -1363,7 +1388,7 @@ private fun TipControlsRow(
 
         // Row 2: Tax chip row (when tax enabled)
         val taxRateStr = taxInfo?.standardRate?.let { r ->
-            if (r == r.toLong().toDouble()) "${r.toLong()}%" else "${"%.1f".format(r)}%"
+            if (r == r.toLong().toDouble()) "${r.toLong()}%" else "${"%.1f".format(Locale.US, r)}%"
         } ?: ""
         if (taxEnabled) {
             if (taxInfo == null) {
@@ -1475,7 +1500,7 @@ private fun CustomTipPercentDialog(current: Double, onSave: (Double) -> Unit, on
     var text by remember {
         mutableStateOf(
             if (current == current.toLong().toDouble()) current.toLong().toString()
-            else "%.1f".format(current)
+            else "%.1f".format(Locale.US, current)
         )
     }
     val value = text.toDoubleOrNull()
@@ -1518,7 +1543,7 @@ private fun EditPresetDialog(current: Double, onSave: (Double) -> Unit, onDismis
     var text by remember {
         mutableStateOf(
             if (current == current.toLong().toDouble()) current.toLong().toString()
-            else "%.1f".format(current)
+            else "%.1f".format(Locale.US, current)
         )
     }
     val value = text.toDoubleOrNull()
@@ -1566,7 +1591,7 @@ private fun TaxSettingsDialog(
 ) {
     val colors = LocalAppColors.current
     val rateStr = taxInfo?.standardRate?.let { r ->
-        if (r == r.toLong().toDouble()) "${r.toLong()}%" else "${"%.3f".format(r).trimEnd('0').trimEnd('.')}%"
+        if (r == r.toLong().toDouble()) "${r.toLong()}%" else "${"%.3f".format(Locale.US, r).trimEnd('0').trimEnd('.')}%"
     } ?: "—"
     Dialog(onDismissRequest = onDismiss) {
         Surface(shape = RoundedCornerShape(16.dp), color = colors.surface) {
@@ -1623,16 +1648,16 @@ private fun TipBreakdownDisplay(
     val colors = LocalAppColors.current
     val bd = computeTipBreakdown(bill, tipPercent, people, taxInfo, taxApplied, tipAfterTax, noTip)
     val pctLabel = if (tipPercent == tipPercent.toLong().toDouble())
-        tipPercent.toLong().toString() else "%.1f".format(tipPercent)
+        tipPercent.toLong().toString() else "%.1f".format(Locale.US, tipPercent)
     val shareText = buildString {
         if (taxInfo != null && taxApplied && bd.taxAmount > 0) {
             val rate = taxInfo.standardRate
-            val rateStr = if (rate == rate.toLong().toDouble()) "${rate.toLong()}%" else "${"%.1f".format(rate)}%"
-            append("Tax ($rateStr ${if (bd.taxIncludedStyle) "incl." else "added"}): ${"%.2f".format(bd.taxAmount)}\n")
+            val rateStr = if (rate == rate.toLong().toDouble()) "${rate.toLong()}%" else "${"%.1f".format(Locale.US, rate)}%"
+            append("Tax ($rateStr ${if (bd.taxIncludedStyle) "incl." else "added"}): ${"%.2f".format(Locale.US, bd.taxAmount)}\n")
         }
-        if (!noTip) append("Tip ($pctLabel%): ${"%.2f".format(bd.tipAmount)}\n")
-        append("Total: ${"%.2f".format(bd.total)}")
-        if (bd.perPerson != null) append("\nEach: ${"%.2f".format(bd.perPerson)}")
+        if (!noTip) append("Tip ($pctLabel%): ${"%.2f".format(Locale.US, bd.tipAmount)}\n")
+        append("Total: ${"%.2f".format(Locale.US, bd.total)}")
+        if (bd.perPerson != null) append("\nEach: ${"%.2f".format(Locale.US, bd.perPerson)}")
     }
     Column(
         modifier = Modifier.fillMaxWidth().padding(horizontal = 20.dp, vertical = 4.dp),
@@ -1640,12 +1665,12 @@ private fun TipBreakdownDisplay(
     ) {
         if (taxInfo != null && taxApplied && bd.taxAmount > 0) {
             val rate = taxInfo.standardRate
-            val rateStr = if (rate == rate.toLong().toDouble()) "${rate.toLong()}%" else "${"%.1f".format(rate)}%"
+            val rateStr = if (rate == rate.toLong().toDouble()) "${rate.toLong()}%" else "${"%.1f".format(Locale.US, rate)}%"
             val taxLabel = if (bd.taxIncludedStyle) "Tax ($rateStr incl.):" else "Tax ($rateStr):"
-            CopyableAmount(text = "$taxLabel  ${"%.2f".format(bd.taxAmount)}", color = colors.textMuted, shareText = shareText)
+            CopyableAmount(text = "$taxLabel  ${"%.2f".format(Locale.US, bd.taxAmount)}", color = colors.textMuted, shareText = shareText)
         }
         if (!noTip) {
-            CopyableAmount(text = "Tip ($pctLabel%):  ${"%.2f".format(bd.tipAmount)}", color = colors.textSecondary, shareText = shareText)
+            CopyableAmount(text = "Tip ($pctLabel%):  ${"%.2f".format(Locale.US, bd.tipAmount)}", color = colors.textSecondary, shareText = shareText)
         }
         if (onConvertToFX != null && bill > 0) {
             Row(
@@ -1663,13 +1688,13 @@ private fun TipBreakdownDisplay(
                         color = colors.operator
                     )
                 }
-                CopyableAmount(text = "Total:  ${"%.2f".format(bd.total)}", color = colors.fromAmountColor, shareText = shareText)
+                CopyableAmount(text = "Total:  ${"%.2f".format(Locale.US, bd.total)}", color = colors.fromAmountColor, shareText = shareText)
             }
         } else {
-            CopyableAmount(text = "Total:  ${"%.2f".format(bd.total)}", color = colors.fromAmountColor, shareText = shareText)
+            CopyableAmount(text = "Total:  ${"%.2f".format(Locale.US, bd.total)}", color = colors.fromAmountColor, shareText = shareText)
         }
         if (bd.perPerson != null) {
-            CopyableAmount(text = "Each:  ${"%.2f".format(bd.perPerson)}", color = colors.toAmountColor, shareText = shareText)
+            CopyableAmount(text = "Each:  ${"%.2f".format(Locale.US, bd.perPerson)}", color = colors.toAmountColor, shareText = shareText)
         }
     }
 }
@@ -1806,7 +1831,7 @@ private fun CustomRateWarningDialog(
                     Text(" → ", color = colors.textSecondary, fontSize = 13.sp)
                     Text(currencyFlag(currency), fontSize = 20.sp)
                     Spacer(Modifier.width(8.dp))
-                    Text("1 ${entry.base} = ${"%.4f".format(entry.rate)} $currency", color = colors.warningColor, fontSize = 13.sp, fontWeight = FontWeight.Medium)
+                    Text("1 ${entry.base} = ${"%.4f".format(Locale.US, entry.rate)} $currency", color = colors.warningColor, fontSize = 13.sp, fontWeight = FontWeight.Medium)
                 }
                 Spacer(Modifier.height(10.dp))
                 Text("$currency has a custom rate override. The conversion will use this instead of the live rate.", color = colors.textSecondary, fontSize = 13.sp, lineHeight = 18.sp)
@@ -1849,7 +1874,7 @@ private fun RefreshCustomRateDialog(
                         Text(" → ", color = colors.textSecondary, fontSize = 13.sp)
                         Text(currencyFlag(target), fontSize = 18.sp)
                         Spacer(Modifier.width(6.dp))
-                        Text("1 ${entry.base} = ${"%.4f".format(entry.rate)} $target", color = colors.warningColor, fontSize = 13.sp, fontWeight = FontWeight.Medium)
+                        Text("1 ${entry.base} = ${"%.4f".format(Locale.US, entry.rate)} $target", color = colors.warningColor, fontSize = 13.sp, fontWeight = FontWeight.Medium)
                     }
                     Spacer(Modifier.height(4.dp))
                 }
@@ -2535,7 +2560,7 @@ private fun OcrOverlayScreen(
             Text("${currencySymbol(fromCurrency)} → ${currencySymbol(toCurrency)}", color = Color.White, fontSize = 15.sp,
                 fontWeight = FontWeight.Medium)
             if (exchangeRate != null) {
-                Text("  (1 = ${"%.4f".format(exchangeRate)})", color = Color.White.copy(0.55f), fontSize = 11.sp)
+                Text("  (1 = ${"%.4f".format(Locale.US, exchangeRate)})", color = Color.White.copy(0.55f), fontSize = 11.sp)
             }
             Spacer(Modifier.weight(1f))
             Row(
@@ -2616,9 +2641,9 @@ private fun OcrOverlayScreen(
                             val fontSize = (boxH.value / density.fontScale * 0.75f)
                                 .coerceIn(6f, 11f).sp
                             val bubbleText = if (ocrConvertEnabled && exchangeRate != null)
-                                "${currencySymbol(toCurrency)}${"%.2f".format(det.value * exchangeRate)}"
+                                "${currencySymbol(toCurrency)}${"%.2f".format(Locale.US, det.value * exchangeRate)}"
                             else
-                                "$receiptSymbol${"%.2f".format(det.value)}"
+                                "$receiptSymbol${"%.2f".format(Locale.US, det.value)}"
                             Box(
                                 modifier = Modifier
                                     .offset { IntOffset(bubbleX, bubbleY) }
@@ -2676,7 +2701,7 @@ private fun OcrOverlayScreen(
                                                 if (newSelected) {
                                                     lastTappedValue = if (det.value == kotlin.math.floor(det.value))
                                                         det.value.toLong().toString()
-                                                    else "%.2f".format(det.value)
+                                                    else "%.2f".format(Locale.US, det.value)
                                                 }
                                                 det.copy(selected = newSelected)
                                             } else det
@@ -2705,7 +2730,7 @@ private fun OcrOverlayScreen(
                 selectedTotal * (1.0 + ocrTaxInfo!!.standardRate / 100.0)
             } else selectedTotal
             val totalStr = if (adjustedTotal == kotlin.math.floor(adjustedTotal))
-                adjustedTotal.toLong().toString() else "%.2f".format(adjustedTotal)
+                adjustedTotal.toLong().toString() else "%.2f".format(Locale.US, adjustedTotal)
             val showConversion = ocrConvertEnabled && exchangeRate != null
             val receiptSym = currencySymbol(detectedReceiptCurrency ?: fromCurrency)
             Column(
@@ -2717,7 +2742,7 @@ private fun OcrOverlayScreen(
                 // Tax chip row
                 if (ocrTaxInfo != null) {
                     val rate = ocrTaxInfo.standardRate
-                    val rateStr = if (rate == rate.toLong().toDouble()) "${rate.toLong()}%" else "${"%.1f".format(rate)}%"
+                    val rateStr = if (rate == rate.toLong().toDouble()) "${rate.toLong()}%" else "${"%.1f".format(Locale.US, rate)}%"
                     Row(modifier = Modifier.fillMaxWidth().padding(bottom = 6.dp), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                         if (ocrTaxInfo.includedInPrice) {
                             FilterChip(
@@ -2747,18 +2772,18 @@ private fun OcrOverlayScreen(
                 Row(verticalAlignment = Alignment.CenterVertically) {
                     Column(modifier = Modifier.weight(1f)) {
                         Text(
-                            "Selected: $receiptSym${"%.2f".format(selectedTotal)}",
+                            "Selected: $receiptSym${"%.2f".format(Locale.US, selectedTotal)}",
                             color = Color.White, fontSize = 12.sp
                         )
                         if (ocrTaxApplied && ocrTaxInfo != null && !ocrTaxInfo.includedInPrice && adjustedTotal != selectedTotal) {
                             Text(
-                                "+ tax: $receiptSym${"%.2f".format(adjustedTotal)}",
+                                "+ tax: $receiptSym${"%.2f".format(Locale.US, adjustedTotal)}",
                                 color = Color(0xFF34C759), fontSize = 13.sp
                             )
                         }
                         if (showConversion) {
                             Text(
-                                "= ${currencySymbol(toCurrency)}${"%.2f".format(adjustedTotal * exchangeRate!!)}",
+                                "= ${currencySymbol(toCurrency)}${"%.2f".format(Locale.US, adjustedTotal * exchangeRate!!)}",
                                 color = Color(0xFFFFD700), fontSize = 16.sp, fontWeight = FontWeight.Bold
                             )
                         }
@@ -2777,7 +2802,7 @@ private fun OcrOverlayScreen(
                 if (showConversion) {
                     val convertedTotal = adjustedTotal * exchangeRate!!
                     val convertedStr = if (convertedTotal == kotlin.math.floor(convertedTotal))
-                        convertedTotal.toLong().toString() else "%.2f".format(convertedTotal)
+                        convertedTotal.toLong().toString() else "%.2f".format(Locale.US, convertedTotal)
                     Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                         Button(
                             onClick = { pendingValue = totalStr; pendingValueHasTax = taxWasAdded },

@@ -35,6 +35,7 @@ import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.tripcalc.app.data.CANADA_PROVINCE_TAX_RATES
 import com.tripcalc.app.data.EU_VAT_RATES
 import com.tripcalc.app.data.US_STATE_TAX_RATES
+import java.util.Locale
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -49,7 +50,7 @@ fun SettingsScreen(vm: CalculatorViewModel, modifier: Modifier = Modifier) {
         mutableStateOf(
             if (state.customTipPercent == state.customTipPercent.toLong().toDouble())
                 state.customTipPercent.toLong().toString()
-            else "%.1f".format(state.customTipPercent)
+            else "%.1f".format(Locale.US, state.customTipPercent)
         )
     }
     val customTipValue = customTipInput.toDoubleOrNull()
@@ -118,7 +119,7 @@ fun SettingsScreen(vm: CalculatorViewModel, modifier: Modifier = Modifier) {
         CustomRateDialog(
             initialTarget = editingTarget,
             initialBase = existing?.base ?: state.fromCurrency,
-            initialRate = existing?.rate?.let { "%.4f".format(it) } ?: "",
+            initialRate = existing?.rate?.let { "%.4f".format(Locale.US, it) } ?: "",
             defaultTarget = state.toCurrency,
             availableCurrencies = state.availableCurrencies,
             liveRates = state.liveRates,
@@ -170,9 +171,9 @@ fun SettingsScreen(vm: CalculatorViewModel, modifier: Modifier = Modifier) {
                                 Text(currencyFlag(target), fontSize = 20.sp)
                                 Text(" $target", color = colors.textSecondary, fontSize = 13.sp, fontWeight = FontWeight.Medium)
                             }
-                            Text("1 ${entry.base} = ${"%.4f".format(entry.rate)} $target", color = colors.warningColor, fontSize = 14.sp, fontWeight = FontWeight.Medium)
+                            Text("1 ${entry.base} = ${"%.4f".format(Locale.US, entry.rate)} $target", color = colors.warningColor, fontSize = 14.sp, fontWeight = FontWeight.Medium)
                             if (livePairRate != null) {
-                                Text("Live: ${"%.4f".format(livePairRate)}", color = colors.textMuted, fontSize = 11.sp)
+                                Text("Live: ${"%.4f".format(Locale.US, livePairRate)}", color = colors.textMuted, fontSize = 11.sp)
                             }
                             Text(targetName, color = colors.textMuted, fontSize = 11.sp)
                         }
@@ -211,9 +212,9 @@ fun SettingsScreen(vm: CalculatorViewModel, modifier: Modifier = Modifier) {
         )
 
         state.cardProfiles.forEach { card ->
-            val pctPart = if (card.markupPercent == 0.0) "0%" else "${"%.2f".format(card.markupPercent).trimEnd('0').trimEnd('.')}%"
+            val pctPart = if (card.markupPercent == 0.0) "0%" else "${"%.2f".format(Locale.US, card.markupPercent).trimEnd('0').trimEnd('.')}%"
             val minPart = if (card.minFeeAmount > 0 && card.minFeeCurrency.isNotEmpty())
-                " · min. ${"%.2f".format(card.minFeeAmount).trimEnd('0').trimEnd('.')} ${card.minFeeCurrency}" else ""
+                " · min. ${"%.2f".format(Locale.US, card.minFeeAmount).trimEnd('0').trimEnd('.')} ${card.minFeeCurrency}" else ""
             val ratesPart = if (card.customRates.isNotEmpty()) " · ${card.customRates.size} custom rate${if (card.customRates.size == 1) "" else "s"}" else ""
             val feeText = "$pctPart fee$minPart$ratesPart"
             Card(
@@ -617,7 +618,7 @@ fun SettingsScreen(vm: CalculatorViewModel, modifier: Modifier = Modifier) {
                         HorizontalDivider(modifier = Modifier.padding(horizontal = 16.dp), color = colors.divider)
                         Column(modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 12.dp)) {
                             val rateStr = if (info.standardRate == info.standardRate.toLong().toDouble())
-                                "${info.standardRate.toLong()}%" else "${"%.1f".format(info.standardRate)}%"
+                                "${info.standardRate.toLong()}%" else "${"%.1f".format(Locale.US, info.standardRate)}%"
                             val styleStr = if (info.includedInPrice) "included in price" else "added at checkout"
                             Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.fillMaxWidth()) {
                                 Text("$rateStr — $styleStr", color = colors.positiveColor, fontSize = 13.sp, modifier = Modifier.weight(1f))
@@ -667,7 +668,7 @@ private fun CardProfileDialog(
     var name by remember(existing?.id) { mutableStateOf(existing?.name ?: "") }
     var markup by remember(existing?.id) { mutableStateOf(existing?.markupPercent?.toFloat() ?: 0f) }
     var minFeeInput by remember(existing?.id) { mutableStateOf(
-        if ((existing?.minFeeAmount ?: 0.0) > 0) "%.2f".format(existing!!.minFeeAmount).trimEnd('0').trimEnd('.') else ""
+        if ((existing?.minFeeAmount ?: 0.0) > 0) "%.2f".format(Locale.US, existing!!.minFeeAmount).trimEnd('0').trimEnd('.') else ""
     ) }
     var minFeeCurrency by remember(existing?.id, defaultCurrency) { mutableStateOf(
         existing?.minFeeCurrency?.takeIf { it.isNotEmpty() } ?: defaultCurrency
@@ -678,7 +679,7 @@ private fun CardProfileDialog(
     var editingRateTarget by remember { mutableStateOf("") }
 
     val snappedMarkup = ((markup / 0.25f).roundToInt() * 0.25).coerceIn(0.0, 5.0)
-    val markupLabel = if (snappedMarkup == 0.0) "Off (0%)" else "${"%.2f".format(snappedMarkup).trimEnd('0').trimEnd('.')}%"
+    val markupLabel = if (snappedMarkup == 0.0) "Off (0%)" else "${"%.2f".format(Locale.US, snappedMarkup).trimEnd('0').trimEnd('.')}%"
     val minFeeAmount = minFeeInput.toDoubleOrNull() ?: 0.0
 
     if (showAddRate) {
@@ -686,7 +687,7 @@ private fun CardProfileDialog(
         CustomRateDialog(
             initialTarget = editingRateTarget,
             initialBase = existingRate?.base ?: defaultCurrency,
-            initialRate = if (existingRate != null) "%.4f".format(existingRate.rate).trimEnd('0').trimEnd('.') else "",
+            initialRate = if (existingRate != null) "%.4f".format(Locale.US, existingRate.rate).trimEnd('0').trimEnd('.') else "",
             defaultTarget = defaultRateTarget,
             availableCurrencies = availableCurrencies,
             liveRates = liveRates,
@@ -779,7 +780,7 @@ private fun CardProfileDialog(
                             verticalAlignment = Alignment.CenterVertically
                         ) {
                             Text(
-                                "1 ${entry.base} = ${"%.4f".format(entry.rate).trimEnd('0').trimEnd('.')} $target",
+                                "1 ${entry.base} = ${"%.4f".format(Locale.US, entry.rate).trimEnd('0').trimEnd('.')} $target",
                                 color = colors.textPrimary, fontSize = 13.sp, modifier = Modifier.weight(1f)
                             )
                             IconButton(onClick = { editingRateTarget = target; showAddRate = true }, modifier = Modifier.size(32.dp)) {
@@ -854,7 +855,7 @@ private fun CustomRateDialog(
         if (rateInput.isEmpty() && baseCode.isNotEmpty() && targetCode.isNotEmpty() && baseCode != targetCode) {
             val b = liveRates[baseCode]
             val t = liveRates[targetCode]
-            if (b != null && t != null && b > 0) rateInput = "%.4f".format(t / b)
+            if (b != null && t != null && b > 0) rateInput = "%.4f".format(Locale.US, t / b)
         }
     }
 
@@ -906,7 +907,7 @@ private fun CustomRateDialog(
                     }
                     if (livePairRate != null) {
                         Spacer(Modifier.height(4.dp))
-                        Text("Live: 1 $baseCode = ${"%.4f".format(livePairRate)} $targetCode", fontSize = 11.sp, color = colors.textMuted)
+                        Text("Live: 1 $baseCode = ${"%.4f".format(Locale.US, livePairRate)} $targetCode", fontSize = 11.sp, color = colors.textMuted)
                     }
                 }
             }
@@ -1061,7 +1062,7 @@ internal fun TaxRegionPickerDialog(
                         val (name, rate) = pair
                         val rateStr = if (rate == 0.0) "No sales tax"
                             else if (rate == rate.toLong().toDouble()) "${rate.toLong()}%"
-                            else "${"%.3f".format(rate).trimEnd('0').trimEnd('.')}%"
+                            else "${"%.3f".format(Locale.US, rate).trimEnd('0').trimEnd('.')}%"
                         Row(
                             modifier = Modifier
                                 .fillMaxWidth()
@@ -1095,7 +1096,7 @@ internal fun TaxRateEditDialog(
     var input by remember(currentRate) {
         mutableStateOf(
             if (currentRate == currentRate.toLong().toDouble()) currentRate.toLong().toString()
-            else "%.2f".format(currentRate)
+            else "%.2f".format(Locale.US, currentRate)
         )
     }
     val value = input.toDoubleOrNull()

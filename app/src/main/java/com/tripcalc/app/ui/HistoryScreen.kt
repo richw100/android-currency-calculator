@@ -32,6 +32,32 @@ fun HistoryScreen(
 
     var editingNoteTimestamp by remember { mutableStateOf<Long?>(null) }
     var pendingRestore by remember { mutableStateOf<HistoryEntry?>(null) }
+    var showClearConfirm by remember { mutableStateOf(false) }
+
+    if (showClearConfirm) {
+        AlertDialog(
+            onDismissRequest = { showClearConfirm = false },
+            containerColor = colors.surface,
+            title = { Text("Clear all history?", color = colors.textPrimary) },
+            text = {
+                Text(
+                    "This will delete all ${state.history.size} entr${if (state.history.size == 1) "y" else "ies"}. This cannot be undone.",
+                    color = colors.textSecondary, fontSize = 14.sp, lineHeight = 20.sp
+                )
+            },
+            confirmButton = {
+                TextButton(onClick = {
+                    vm.onAction(CalculatorAction.ClearHistory)
+                    showClearConfirm = false
+                }) { Text("Clear all", color = colors.errorColor) }
+            },
+            dismissButton = {
+                TextButton(onClick = { showClearConfirm = false }) {
+                    Text("Cancel", color = colors.textSecondary)
+                }
+            }
+        )
+    }
 
     editingNoteTimestamp?.let { ts ->
         val entry = state.history.find { it.timestamp == ts }
@@ -64,10 +90,10 @@ fun HistoryScreen(
                     }
                     if (entry.cardName != null) {
                         val pctStr = entry.cardMarkupPercent?.let {
-                            if (it == 0.0) "0%" else "${"%.2f".format(it).trimEnd('0').trimEnd('.')}%"
+                            if (it == 0.0) "0%" else "${"%.2f".format(Locale.US, it).trimEnd('0').trimEnd('.')}%"
                         } ?: "0%"
                         val minStr = if (entry.cardMinFeeAmount != null && entry.cardMinFeeCurrency != null)
-                            " or min. ${"%.2f".format(entry.cardMinFeeAmount).trimEnd('0').trimEnd('.')} ${entry.cardMinFeeCurrency}"
+                            " or min. ${"%.2f".format(Locale.US, entry.cardMinFeeAmount).trimEnd('0').trimEnd('.')} ${entry.cardMinFeeCurrency}"
                         else ""
                         Text(
                             "Originally calculated with card \"${entry.cardName}\" ($pctStr fee$minStr). Your current card selection will not change.",
@@ -118,7 +144,7 @@ fun HistoryScreen(
                     color = colors.textSecondary,
                     fontSize = 13.sp
                 )
-                TextButton(onClick = { vm.onAction(CalculatorAction.ClearHistory) }) {
+                TextButton(onClick = { showClearConfirm = true }) {
                     Icon(Icons.Default.Delete, contentDescription = null, modifier = Modifier.size(16.dp), tint = colors.errorColor)
                     Spacer(Modifier.width(4.dp))
                     Text("Clear all", color = colors.errorColor, fontSize = 13.sp)
@@ -134,9 +160,12 @@ fun HistoryScreen(
                     HistoryEntryCard(
                         entry = entry,
                         onClick = {
+                            // Non-currency entries hold unit labels ("10%", "mi") in the currency
+                            // fields — restoring them never changes currencies, so skip the dialog
+                            val isCurrencyEntry = entry.conversionMode == ConversionMode.CURRENCY.name
                             val currenciesMatch = entry.fromCurrency == state.fromCurrency && entry.toCurrency == state.toCurrency
                             val hasCardInfo = entry.cardName != null
-                            if (currenciesMatch && !hasCardInfo) {
+                            if (!isCurrencyEntry || (currenciesMatch && !hasCardInfo)) {
                                 vm.onAction(CalculatorAction.RestoreHistory(entry))
                                 onEntryRestored()
                             } else {

@@ -1,8 +1,13 @@
 package com.tripcalc.app.data
 
 /**
- * Tax rates for informational display on included-tax countries.
+ * Non-US/CA countries selectable in the tax picker.
  * Triple: (countryName, standardRate, reducedRates)
+ *
+ * Note: these are deliberately treated as NOT included in the displayed price
+ * (see resolveTaxInfo). Japan is transitioning between pricing styles and tax
+ * is sometimes not included, so the app defaults to added-at-checkout and lets
+ * the user toggle the tax chip based on the price they can see.
  */
 val EU_VAT_RATES: Map<String, Triple<String, Double, List<Double>>> = mapOf(
     "JP" to Triple("Japan", 10.0, listOf(8.0)),

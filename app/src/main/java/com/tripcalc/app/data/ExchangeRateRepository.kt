@@ -35,6 +35,10 @@ private val RECENT_CURRENCIES_KEY = stringPreferencesKey("recent_currencies")
 
 private const val CACHE_TTL_MS = 24 * 60 * 60 * 1000L
 
+// isStale = served from the cache because a refresh attempt failed (drives the offline indicator);
+// a fresh-cache hit within the TTL is NOT stale.
+data class RatesResult(val rates: Map<String, Double>, val isStale: Boolean)
+
 class ExchangeRateRepository(private val context: Context) {
     private val api = ExchangeRateApi.create()
     private val gson = Gson()
@@ -42,7 +46,7 @@ class ExchangeRateRepository(private val context: Context) {
     private val customRateMapType = object : TypeToken<Map<String, CustomRateEntry>>() {}.type
     private val historyListType = object : TypeToken<List<HistoryEntry>>() {}.type
 
-    suspend fun getRates(baseCurrency: String = "USD", forceRefresh: Boolean = false): Map<String, Double> {
+    suspend fun getRates(baseCurrency: String = "USD", forceRefresh: Boolean = false): RatesResult {
         val prefs = context.dataStore.data.first()
         val cachedJson = prefs[RATES_KEY]
         val timestamp = prefs[TIMESTAMP_KEY] ?: 0L
@@ -52,7 +56,7 @@ class ExchangeRateRepository(private val context: Context) {
             && cachedBase == baseCurrency
             && System.currentTimeMillis() - timestamp < CACHE_TTL_MS
 
-        if (cacheValid) return gson.fromJson(cachedJson, rateMapType)
+        if (cacheValid) return RatesResult(gson.fromJson(cachedJson, rateMapType), isStale = false)
 
         return try {
             val response = api.getRates(baseCurrency)
@@ -61,9 +65,9 @@ class ExchangeRateRepository(private val context: Context) {
                 it[TIMESTAMP_KEY] = System.currentTimeMillis()
                 it[BASE_KEY] = baseCurrency
             }
-            response.rates
+            RatesResult(response.rates, isStale = false)
         } catch (e: Exception) {
-            if (cachedJson != null) gson.fromJson(cachedJson, rateMapType)
+            if (cachedJson != null) RatesResult(gson.fromJson(cachedJson, rateMapType), isStale = true)
             else throw e
         }
     }

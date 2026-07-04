@@ -1,6 +1,10 @@
 package com.tripcalc.app.ui
 
 import android.app.Application
+import android.graphics.Bitmap
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.setValue
 import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
 import com.tripcalc.app.data.CANADA_PROVINCE_TAX_RATES
@@ -15,6 +19,7 @@ import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
 import java.util.Currency as JavaCurrency
+import java.util.Locale
 import java.util.UUID
 import kotlin.math.abs
 import kotlin.math.floor
@@ -363,6 +368,11 @@ class CalculatorViewModel(application: Application) : AndroidViewModel(applicati
     private var justCalculated = false
     private var shouldResetInput = false
     private var tipSavedBill: String? = null
+    private var lastCalcExpression = ""
+
+    // Receipt image for the OCR overlay — held here rather than in saved instance
+    // state (too large for a Bundle) so it survives rotation
+    var ocrBitmap by mutableStateOf<Bitmap?>(null)
 
     // Each ( pushes the current (firstOperand, pendingOp) so ) can restore it
     private val bracketStack = mutableListOf<BracketState>()
@@ -436,6 +446,9 @@ class CalculatorViewModel(application: Application) : AndroidViewModel(applicati
             else -> {
                 val (countryName, bundledRate, reduced) = EU_VAT_RATES[countryCode] ?: return null
                 val rate = override ?: bundledRate
+                // includedInPrice = false is deliberate for Japan: pricing there is transitioning
+                // and sales tax is sometimes not included, so treat it as added-at-checkout and
+                // let the user toggle the tax chip based on what they see in the moment.
                 TaxRateInfo(countryCode, countryName, rate, reduced, false)
             }
         }
@@ -454,7 +467,8 @@ class CalculatorViewModel(application: Application) : AndroidViewModel(applicati
         viewModelScope.launch {
             _uiState.update { it.copy(isRefreshing = true) }
             try {
-                rates = repository.getRates("USD", forceRefresh)
+                val result = repository.getRates("USD", forceRefresh)
+                rates = result.rates
                 val updated = repository.getLastUpdated()
                 _uiState.update {
                     it.copy(
@@ -462,7 +476,7 @@ class CalculatorViewModel(application: Application) : AndroidViewModel(applicati
                         lastUpdated = "Updated $updated",
                         availableCurrencies = rates.keys.sorted(),
                         liveRates = rates,
-                        isOffline = false
+                        isOffline = result.isStale
                     )
                 }
             } catch (e: Exception) {
@@ -549,12 +563,24 @@ class CalculatorViewModel(application: Application) : AndroidViewModel(applicati
                 firstOperand = null; pendingOp = null
                 bracketStack.clear(); expressionDisplay.clear()
                 justCalculated = true; shouldResetInput = false
-                _uiState.update { it.copy(
-                    isError = false,
-                    fromCurrency = entry.fromCurrency,
-                    toCurrency = entry.toCurrency
-                ) }
-                viewModelScope.launch { repository.saveCurrencyPrefs(entry.toCurrency, entry.fromCurrency) }
+                val entryMode = ConversionMode.entries.find { it.name == entry.conversionMode }
+                if (entryMode == ConversionMode.CURRENCY) {
+                    _uiState.update { it.copy(
+                        isError = false,
+                        fromCurrency = entry.fromCurrency,
+                        toCurrency = entry.toCurrency,
+                        conversionMode = ConversionMode.CURRENCY
+                    ) }
+                    viewModelScope.launch { repository.saveCurrencyPrefs(entry.toCurrency, entry.fromCurrency) }
+                } else {
+                    // Non-currency entries store unit labels (e.g. "10%", "mi") in the currency
+                    // fields — never write those into the currency state or prefs
+                    val targetMode = entryMode?.takeIf { it in _uiState.value.enabledModes }
+                    _uiState.update { it.copy(
+                        isError = false,
+                        conversionMode = targetMode ?: it.conversionMode
+                    ) }
+                }
                 updateDisplay(); return
             }
             is CalculatorAction.ClearHistory -> {
@@ -893,16 +919,14 @@ class CalculatorViewModel(application: Application) : AndroidViewModel(applicati
     private fun handleDelete() {
         if (justCalculated || _uiState.value.isError) { handleClear(); return }
         if (shouldResetInput) {
-            // Undo the last operator: trim it from the expression display
+            // Undo the last operator: fold the chain back to a single editable value
+            // (a partial chain like "5 + 3 +" collapses to its running total "8" —
+            // keeping the expression text would drift out of sync with the operands)
             if (pendingOp != null) {
-                val expr = expressionDisplay.toString().trimEnd()
-                val lastSpace = expr.lastIndexOf(' ')
-                expressionDisplay.clear()
-                if (lastSpace > 0) expressionDisplay.append(expr.substring(0, lastSpace).trimEnd())
-                // Restore currentInput to show firstOperand value
                 currentInput = formatResult(firstOperand ?: 0.0)
-                if (firstOperand != null && lastSpace <= 0) firstOperand = null
+                firstOperand = null
                 pendingOp = null
+                expressionDisplay.clear()
             }
             shouldResetInput = false
             return
@@ -1001,6 +1025,10 @@ class CalculatorViewModel(application: Application) : AndroidViewModel(applicati
         // Auto-close any unclosed brackets
         var value = currentInput.toDoubleOrNull() ?: return
 
+        // Snapshot the expression for history before it is cleared below
+        lastCalcExpression = if (expressionDisplay.isEmpty()) ""
+            else expressionDisplay.toString() + (if (shouldResetInput) "" else currentInput)
+
         if (firstOperand != null && pendingOp != null) {
             value = applyOp(firstOperand!!, value, pendingOp!!) ?: run {
                 _uiState.update { it.copy(isError = true, display = "Error") }; return
@@ -1027,12 +1055,12 @@ class CalculatorViewModel(application: Application) : AndroidViewModel(applicati
         val distTo   = if (state.distanceReversed) state.distancePair.fromAbbr else state.distancePair.toAbbr
         val toTempUnit = if (state.tempUnit == TempUnit.CELSIUS) TempUnit.FAHRENHEIT else TempUnit.CELSIUS
         val pctLabel = if (state.tipPercent == state.tipPercent.toLong().toDouble())
-            state.tipPercent.toLong().toString() else "%.1f".format(state.tipPercent)
+            state.tipPercent.toLong().toString() else "%.1f".format(Locale.US, state.tipPercent)
         val activeCard = if (state.conversionMode == ConversionMode.CURRENCY)
             state.cardProfiles.find { it.id == state.activeCardId } else null
         val entry = HistoryEntry(
             display = state.display,
-            expression = state.expression,
+            expression = lastCalcExpression,
             fromAmount = state.fromAmount,
             toAmount = state.toAmount,
             fromCurrency = when (state.conversionMode) {
@@ -1084,7 +1112,7 @@ class CalculatorViewModel(application: Application) : AndroidViewModel(applicati
     private fun formatResult(value: Double): String {
         if (value.isInfinite() || value.isNaN()) return "Error"
         return if (value == floor(value) && abs(value) < 1e12) value.toLong().toString()
-        else "%.10g".format(value).trimEnd('0').trimEnd('.')
+        else "%.10g".format(Locale.US, value).trimEnd('0').trimEnd('.')
     }
 
     private fun updateDisplay() {
@@ -1141,14 +1169,14 @@ class CalculatorViewModel(application: Application) : AndroidViewModel(applicati
             val (toValue, cardLabel) = if (activeCard != null) {
                 val percentFee = baseToValue * activeCard.markupPercent / 100.0
                 val pctStr = if (activeCard.markupPercent == 0.0) "0%"
-                    else "+${"%.2f".format(activeCard.markupPercent).trimEnd('0').trimEnd('.')}%"
+                    else "+${"%.2f".format(Locale.US, activeCard.markupPercent).trimEnd('0').trimEnd('.')}%"
                 if (value > 0 && activeCard.minFeeAmount > 0 && activeCard.minFeeCurrency.isNotEmpty()) {
                     val minFeeRate = rates[activeCard.minFeeCurrency]
                     val minFeeInTo = if (minFeeRate != null && minFeeRate > 0)
                         activeCard.minFeeAmount * toRate / minFeeRate
                     else activeCard.minFeeAmount
                     if (minFeeInTo > percentFee) {
-                        val minStr = "${"%.2f".format(activeCard.minFeeAmount)} ${activeCard.minFeeCurrency}"
+                        val minStr = "${"%.2f".format(Locale.US, activeCard.minFeeAmount)} ${activeCard.minFeeCurrency}"
                         Pair(baseToValue + minFeeInTo, "  •  💳 ${activeCard.name} min. $minStr")
                     } else {
                         Pair(baseToValue + percentFee, "  •  💳 ${activeCard.name} $pctStr")
@@ -1160,7 +1188,7 @@ class CalculatorViewModel(application: Application) : AndroidViewModel(applicati
                 Pair(baseToValue, "")
             }
 
-            val rateLabel = "1 ${state.fromCurrency} ($fromName) = ${"%.4f".format(toRate / fromRate)} ${state.toCurrency} ($toName)" +
+            val rateLabel = "1 ${state.fromCurrency} ($fromName) = ${"%.4f".format(Locale.US, toRate / fromRate)} ${state.toCurrency} ($toName)" +
                 (if (usingCustom) " ★" else "") + cardLabel
             val pctDiff = if (usingCustom) {
                 val liveFrom = rates[state.fromCurrency]
@@ -1173,8 +1201,8 @@ class CalculatorViewModel(application: Application) : AndroidViewModel(applicati
             } else null
             _uiState.update {
                 it.copy(
-                    fromAmount = "${state.fromCurrency} ${"%.2f".format(value)}",
-                    toAmount = "${state.toCurrency} ${"%.2f".format(toValue)}",
+                    fromAmount = "${state.fromCurrency} ${"%.2f".format(Locale.US, value)}",
+                    toAmount = "${state.toCurrency} ${"%.2f".format(Locale.US, toValue)}",
                     exchangeRateLabel = rateLabel,
                     customRatePctDiff = pctDiff,
                     exchangeRate = toRate / fromRate
@@ -1203,14 +1231,16 @@ class CalculatorViewModel(application: Application) : AndroidViewModel(applicati
                 val kg = (value * 14 + lbs) * 0.453592
                 _uiState.update { it.copy(
                     fromAmount = "${currentInput.ifEmpty { "0" }} st $lbs lb",
-                    toAmount   = "kg ${"%.3f".format(kg)}",
+                    toAmount   = "kg ${"%.3f".format(Locale.US, kg)}",
                     exchangeRateLabel = "1 st = 6.350 kg  ·  1 lb = 0.454 kg",
                     customRatePctDiff = null
                 )}
             } else {
-                val totalLbs = value / 0.453592
-                val stonePart = (totalLbs / 14).toLong()
-                val lbPart    = (totalLbs % 14).roundToInt().coerceIn(0, 13)
+                // Round total pounds first so e.g. 13.9 lb carries to the next stone
+                // instead of clamping at "13 lb"
+                val wholeLbs  = (value / 0.453592).roundToInt()
+                val stonePart = wholeLbs / 14
+                val lbPart    = wholeLbs % 14
                 _uiState.update { it.copy(
                     fromAmount = "kg ${currentInput.ifEmpty { "0" }}",
                     toAmount   = "$stonePart st $lbPart lb",
@@ -1228,9 +1258,9 @@ class CalculatorViewModel(application: Application) : AndroidViewModel(applicati
         val converted = value * factor
         _uiState.update {
             it.copy(
-                fromAmount = "$fromAbbr ${"%.4f".format(value)}",
-                toAmount = "$toAbbr ${"%.4f".format(converted)}",
-                exchangeRateLabel = "1 $fromAbbr = ${"%.5f".format(factor)} $toAbbr",
+                fromAmount = "$fromAbbr ${"%.4f".format(Locale.US, value)}",
+                toAmount = "$toAbbr ${"%.4f".format(Locale.US, converted)}",
+                exchangeRateLabel = "1 $fromAbbr = ${"%.5f".format(Locale.US, factor)} $toAbbr",
                 customRatePctDiff = null
             )
         }
@@ -1245,8 +1275,8 @@ class CalculatorViewModel(application: Application) : AndroidViewModel(applicati
         }
         _uiState.update {
             it.copy(
-                fromAmount = "$fromAbbr ${"%.2f".format(value)}",
-                toAmount = "$toAbbr ${"%.2f".format(converted)}",
+                fromAmount = "$fromAbbr ${"%.2f".format(Locale.US, value)}",
+                toAmount = "$toAbbr ${"%.2f".format(Locale.US, converted)}",
                 exchangeRateLabel = "$fromAbbr  ⇄  $toAbbr",
                 customRatePctDiff = null
             )
@@ -1261,11 +1291,11 @@ class CalculatorViewModel(application: Application) : AndroidViewModel(applicati
             state.currentTaxInfo, state.taxApplied, state.tipAfterTax, state.noTip
         )
         val pctLabel = if (state.tipPercent == state.tipPercent.toLong().toDouble())
-            state.tipPercent.toLong().toString() else "%.1f".format(state.tipPercent)
+            state.tipPercent.toLong().toString() else "%.1f".format(Locale.US, state.tipPercent)
         _uiState.update {
             it.copy(
-                fromAmount = "Tip ${"%.2f".format(bd.tipAmount)}",
-                toAmount = "Total ${"%.2f".format(bd.total)}",
+                fromAmount = "Tip ${"%.2f".format(Locale.US, bd.tipAmount)}",
+                toAmount = "Total ${"%.2f".format(Locale.US, bd.total)}",
                 exchangeRateLabel = "$pctLabel% tip · ${state.tipPeopleCount} ${if (state.tipPeopleCount == 1) "person" else "people"}",
                 customRatePctDiff = null
             )
@@ -1284,8 +1314,8 @@ class CalculatorViewModel(application: Application) : AndroidViewModel(applicati
                 "62.14 ÷ mi/kWh = kWh/100km" else "62.14 ÷ kWh/100km = mi/kWh"
             _uiState.update {
                 it.copy(
-                    fromAmount = "$fromAbbr ${"%.2f".format(value)}",
-                    toAmount = "$toAbbr ${"%.2f".format(converted)}",
+                    fromAmount = "$fromAbbr ${"%.2f".format(Locale.US, value)}",
+                    toAmount = "$toAbbr ${"%.2f".format(Locale.US, converted)}",
                     exchangeRateLabel = rateLabel,
                     customRatePctDiff = null
                 )
@@ -1300,8 +1330,8 @@ class CalculatorViewModel(application: Application) : AndroidViewModel(applicati
                 "${factor.toInt()} ÷ mpg = L/100km" else "${factor.toInt()} ÷ L/100km = $mpgLabel"
             _uiState.update {
                 it.copy(
-                    fromAmount = "$fromAbbr ${"%.2f".format(value)}",
-                    toAmount = "$toAbbr ${"%.2f".format(converted)}",
+                    fromAmount = "$fromAbbr ${"%.2f".format(Locale.US, value)}",
+                    toAmount = "$toAbbr ${"%.2f".format(Locale.US, converted)}",
                     exchangeRateLabel = rateLabel,
                     customRatePctDiff = null
                 )

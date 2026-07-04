@@ -15,6 +15,7 @@ import kotlinx.coroutines.withContext
 import okhttp3.OkHttpClient
 import okhttp3.Request
 import org.json.JSONObject
+import java.io.IOException
 import java.net.URLEncoder
 
 private const val LOCALISATION_CACHE_TTL_MS = 7L * 24 * 60 * 60 * 1000L
@@ -81,7 +82,9 @@ class LocalisationRepository(private val context: Context) {
         return try {
             fetchAndCache(code)
         } catch (e: Exception) {
-            loadCached(code) ?: buildStubInfo(code)
+            // A stale cache beats nothing; with no cache, rethrow so the UI can show an error
+            // (static plug/water/driving data is rendered from the bundled maps regardless)
+            loadCached(code) ?: throw e
         }
     }
 
@@ -89,23 +92,29 @@ class LocalisationRepository(private val context: Context) {
         val wikidataDeferred = async { fetchWikidata(code) }
         val restCountriesDeferred = async { fetchRestCountries(code) }
 
+        // null = that fetch failed (offline, HTTP error) as opposed to genuinely missing data
         val wikiResult = wikidataDeferred.await()
         val restResult = restCountriesDeferred.await()
+        if (wikiResult == null && restResult == null) {
+            throw IOException("Both localisation sources failed for $code")
+        }
 
         val info = CountryLocalisationInfo(
             code = code,
-            name = restResult.name ?: COUNTRY_LIST.find { it.first == code }?.second ?: code,
-            callingCode = restResult.callingCode,
-            currencies = restResult.currencies,
-            languages = restResult.languages,
-            drivingSide = wikiResult.drivingSide,
-            emergencyNumbers = wikiResult.emergencyNumbers,
+            name = restResult?.name ?: COUNTRY_LIST.find { it.first == code }?.second ?: code,
+            callingCode = restResult?.callingCode,
+            currencies = restResult?.currencies ?: emptyList(),
+            languages = restResult?.languages ?: emptyList(),
+            drivingSide = wikiResult?.drivingSide,
+            emergencyNumbers = wikiResult?.emergencyNumbers ?: emptyList(),
             plugInfo = PLUG_TYPES[code],
             tapWaterSafe = TAP_WATER_SAFE[code],
             drivingInfo = DRIVING_INFO[code],
             fetchedAt = System.currentTimeMillis()
         )
-        saveToCache(code, info)
+        // Only cache complete results — caching a partial fetch would pin the missing
+        // fields (and potentially overwrite an older complete cache) for the 7-day TTL
+        if (wikiResult != null && restResult != null) saveToCache(code, info)
         info
     }
 
@@ -115,7 +124,7 @@ class LocalisationRepository(private val context: Context) {
         val languages: List<String>, val name: String?
     )
 
-    private suspend fun fetchWikidata(code: String): WikidataResult = withContext(Dispatchers.IO) {
+    private suspend fun fetchWikidata(code: String): WikidataResult? = withContext(Dispatchers.IO) {
         val query = """
             SELECT ?drivingSideLabel ?emLabel WHERE {
               ?country wdt:P297 "$code".
@@ -130,8 +139,10 @@ class LocalisationRepository(private val context: Context) {
         try {
             val url = "https://query.wikidata.org/sparql?format=json&query=${URLEncoder.encode(query, "UTF-8")}"
             val request = Request.Builder().url(url).build()
-            val body = httpClient.newCall(request).execute().use { it.body?.string() }
-                ?: return@withContext WikidataResult(null, emptyList())
+            val body = httpClient.newCall(request).execute().use { resp ->
+                if (!resp.isSuccessful) return@withContext null
+                resp.body?.string()
+            } ?: return@withContext null
 
             val json = JSONObject(body)
             val bindings = json.getJSONObject("results").getJSONArray("bindings")
@@ -156,16 +167,18 @@ class LocalisationRepository(private val context: Context) {
 
             WikidataResult(drivingSide, emergencyNumbers.sorted())
         } catch (e: Exception) {
-            WikidataResult(null, emptyList())
+            null
         }
     }
 
-    private suspend fun fetchRestCountries(code: String): RestCountriesResult = withContext(Dispatchers.IO) {
+    private suspend fun fetchRestCountries(code: String): RestCountriesResult? = withContext(Dispatchers.IO) {
         try {
             val url = "https://restcountries.com/v3.1/alpha/$code?fields=name,currencies,languages,idd"
             val request = Request.Builder().url(url).build()
-            val body = httpClient.newCall(request).execute().use { it.body?.string() }
-                ?: return@withContext RestCountriesResult(null, emptyList(), emptyList(), null)
+            val body = httpClient.newCall(request).execute().use { resp ->
+                if (!resp.isSuccessful) return@withContext null
+                resp.body?.string()
+            } ?: return@withContext null
 
             val json = JSONObject(body)
 
@@ -196,7 +209,7 @@ class LocalisationRepository(private val context: Context) {
 
             RestCountriesResult(callingCode, currencies, languages, name)
         } catch (e: Exception) {
-            RestCountriesResult(null, emptyList(), emptyList(), null)
+            null
         }
     }
 
