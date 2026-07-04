@@ -1294,7 +1294,8 @@ class CalculatorViewModel(application: Application) : AndroidViewModel(applicati
             state.tipPercent.toLong().toString() else "%.1f".format(Locale.US, state.tipPercent)
         _uiState.update {
             it.copy(
-                fromAmount = "Tip ${"%.2f".format(Locale.US, bd.tipAmount)}",
+                // These only surface in history cards ("Bill" tab shows TipBreakdownDisplay)
+                fromAmount = "Bill ${"%.2f".format(Locale.US, bd.bill)}",
                 toAmount = "Total ${"%.2f".format(Locale.US, bd.total)}",
                 exchangeRateLabel = "$pctLabel% tip · ${state.tipPeopleCount} ${if (state.tipPeopleCount == 1) "person" else "people"}",
                 customRatePctDiff = null

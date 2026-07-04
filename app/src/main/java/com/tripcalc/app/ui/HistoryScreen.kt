@@ -206,7 +206,7 @@ private fun HistoryEntryCard(
                 text = when (entry.conversionMode) {
                     "DISTANCE"    -> "📏 ${entry.fromAmount}  →  ${entry.toAmount}"
                     "TEMPERATURE" -> "🌡 ${entry.fromAmount}  →  ${entry.toAmount}"
-                    "TIP"         -> "🍽 ${entry.fromAmount}  ·  ${entry.toAmount}"
+                    "TIP"         -> "🧾 ${entry.fromAmount}  ·  ${entry.toAmount}"
                     "FUEL"        -> "⛽ ${entry.fromAmount}  →  ${entry.toAmount}"
                     else          -> "${currencyFlag(entry.fromCurrency)} ${entry.fromAmount}  →  ${currencyFlag(entry.toCurrency)} ${entry.toAmount}"
                 },
