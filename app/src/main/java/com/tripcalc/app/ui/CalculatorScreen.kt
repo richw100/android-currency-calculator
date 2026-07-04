@@ -198,21 +198,26 @@ private fun saveReceiptScreenshot(
     footerLines: List<Pair<String, Int>>
 ): Boolean {
     return try {
-        val textSize = shot.width / 24f
+        // toImageBitmap() can yield a HARDWARE bitmap, which cannot be drawn onto a
+        // software Canvas — convert before compositing
+        val src = if (shot.config == Bitmap.Config.HARDWARE)
+            shot.copy(Bitmap.Config.ARGB_8888, false) ?: return false
+        else shot
+        val textSize = src.width / 24f
         val lineHeight = textSize * 1.4f
-        val padding = shot.width / 30f
+        val padding = src.width / 30f
         val footerHeight = if (footerLines.isEmpty()) 0 else (footerLines.size * lineHeight + padding).toInt()
-        val composed = Bitmap.createBitmap(shot.width, shot.height + footerHeight, Bitmap.Config.ARGB_8888)
+        val composed = Bitmap.createBitmap(src.width, src.height + footerHeight, Bitmap.Config.ARGB_8888)
         val canvas = AndroidCanvas(composed)
         canvas.drawColor(android.graphics.Color.BLACK)
-        canvas.drawBitmap(shot, 0f, 0f, null)
+        canvas.drawBitmap(src, 0f, 0f, null)
         val paint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
             this.textSize = textSize
             typeface = Typeface.DEFAULT_BOLD
         }
         footerLines.forEachIndexed { i, (text, colour) ->
             paint.color = colour
-            canvas.drawText(text, padding, shot.height + padding / 2f + textSize + i * lineHeight, paint)
+            canvas.drawText(text, padding, src.height + padding / 2f + textSize + i * lineHeight, paint)
         }
 
         val filename = "TripCalc_${SimpleDateFormat("yyyyMMdd_HHmmss", Locale.US).format(Date())}.jpg"
@@ -239,6 +244,7 @@ private fun saveReceiptScreenshot(
         }
         true
     } catch (e: Exception) {
+        android.util.Log.w("TripCalc", "Screenshot save failed", e)
         false
     }
 }
@@ -2661,7 +2667,9 @@ private fun OcrOverlayScreen(
             IconButton(
                 onClick = {
                     scope.launch {
-                        val shot = runCatching { captureLayer.toImageBitmap().asAndroidBitmap() }.getOrNull()
+                        val shot = runCatching { captureLayer.toImageBitmap().asAndroidBitmap() }
+                            .onFailure { android.util.Log.w("TripCalc", "Screenshot capture failed", it) }
+                            .getOrNull()
                         val footer: List<Pair<String, Int>> = if (selectedItems.isEmpty()) emptyList() else buildList {
                             val receiptSym = currencySymbol(detectedReceiptCurrency ?: fromCurrency)
                             add("Selected: $receiptSym${"%.2f".format(Locale.US, selectedTotal)}" to 0xFFFFFFFF.toInt())
