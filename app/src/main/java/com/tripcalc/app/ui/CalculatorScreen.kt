@@ -150,8 +150,9 @@ private const val MAX_OCR_IMAGE_DIMENSION = 2560
 
 private fun loadOrientedBitmap(context: android.content.Context, uri: Uri): Bitmap? {
     val bounds = BitmapFactory.Options().apply { inJustDecodeBounds = true }
-    context.contentResolver.openInputStream(uri)
-        ?.use { BitmapFactory.decodeStream(it, null, bounds) } ?: return null
+    val boundsStream = context.contentResolver.openInputStream(uri) ?: return null
+    // decodeStream always returns null in bounds-only mode — success is outWidth/outHeight > 0
+    boundsStream.use { BitmapFactory.decodeStream(it, null, bounds) }
     if (bounds.outWidth <= 0 || bounds.outHeight <= 0) return null
     var sampleSize = 1
     while (maxOf(bounds.outWidth, bounds.outHeight) / sampleSize > MAX_OCR_IMAGE_DIMENSION) sampleSize *= 2
