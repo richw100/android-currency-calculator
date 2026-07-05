@@ -242,6 +242,8 @@ data class CalculatorUiState(
     val darkModePref: DarkModePref = DarkModePref.SYSTEM,
     val accentScheme: AccentScheme = AccentScheme.TEAL_GREEN,
     val conversionMode: ConversionMode = ConversionMode.CURRENCY,
+    // Stack of modes visited before the current one, for back-button navigation between chips
+    val modeHistory: List<ConversionMode> = emptyList(),
     val distancePair: DistancePair = DistancePair.MILES_KM,
     val distanceReversed: Boolean = false,
     val enabledDistancePairs: Set<DistancePair> = setOf(DistancePair.MILES_KM),
@@ -309,6 +311,7 @@ sealed class CalculatorAction {
     data class SetDarkMode(val pref: DarkModePref) : CalculatorAction()
     data class SetAccentScheme(val scheme: AccentScheme) : CalculatorAction()
     data class SetConversionMode(val mode: ConversionMode) : CalculatorAction()
+    object PopConversionMode : CalculatorAction()
     object SwapDistanceUnits : CalculatorAction()
     data class SetDistancePair(val pair: DistancePair) : CalculatorAction()
     data class SetEnabledDistancePairs(val pairs: Set<DistancePair>) : CalculatorAction()
@@ -369,6 +372,15 @@ class CalculatorViewModel(application: Application) : AndroidViewModel(applicati
     private var shouldResetInput = false
     private var tipSavedBill: String? = null
     private var lastCalcExpression = ""
+
+    private fun restoreTipBillIfNeeded(mode: ConversionMode) {
+        if (mode == ConversionMode.TIP && tipSavedBill != null) {
+            currentInput = tipSavedBill!!
+            firstOperand = null; pendingOp = null
+            bracketStack.clear(); expressionDisplay.clear()
+            justCalculated = true; shouldResetInput = false
+        }
+    }
 
     // Receipt image for the OCR overlay — held here rather than in saved instance
     // state (too large for a Bundle) so it survives rotation
@@ -569,7 +581,8 @@ class CalculatorViewModel(application: Application) : AndroidViewModel(applicati
                         isError = false,
                         fromCurrency = entry.fromCurrency,
                         toCurrency = entry.toCurrency,
-                        conversionMode = ConversionMode.CURRENCY
+                        conversionMode = ConversionMode.CURRENCY,
+                        modeHistory = emptyList()
                     ) }
                     viewModelScope.launch { repository.saveCurrencyPrefs(entry.toCurrency, entry.fromCurrency) }
                 } else {
@@ -578,7 +591,8 @@ class CalculatorViewModel(application: Application) : AndroidViewModel(applicati
                     val targetMode = entryMode?.takeIf { it in _uiState.value.enabledModes }
                     _uiState.update { it.copy(
                         isError = false,
-                        conversionMode = targetMode ?: it.conversionMode
+                        conversionMode = targetMode ?: it.conversionMode,
+                        modeHistory = emptyList()
                     ) }
                 }
                 updateDisplay(); return
@@ -599,13 +613,18 @@ class CalculatorViewModel(application: Application) : AndroidViewModel(applicati
                 return
             }
             is CalculatorAction.SetConversionMode -> {
-                if (action.mode == ConversionMode.TIP && tipSavedBill != null) {
-                    currentInput = tipSavedBill!!
-                    firstOperand = null; pendingOp = null
-                    bracketStack.clear(); expressionDisplay.clear()
-                    justCalculated = true; shouldResetInput = false
+                restoreTipBillIfNeeded(action.mode)
+                _uiState.update {
+                    val newHistory = if (action.mode != it.conversionMode) it.modeHistory + it.conversionMode else it.modeHistory
+                    it.copy(conversionMode = action.mode, modeHistory = newHistory)
                 }
-                _uiState.update { it.copy(conversionMode = action.mode) }
+                updateDisplay(); return
+            }
+            CalculatorAction.PopConversionMode -> {
+                val history = _uiState.value.modeHistory
+                val prev = history.lastOrNull() ?: return
+                restoreTipBillIfNeeded(prev)
+                _uiState.update { it.copy(conversionMode = prev, modeHistory = history.dropLast(1)) }
                 updateDisplay(); return
             }
             is CalculatorAction.SwapDistanceUnits -> {
@@ -676,7 +695,7 @@ class CalculatorViewModel(application: Application) : AndroidViewModel(applicati
                 val modes = (action.modes + ConversionMode.CURRENCY)
                 val currentMode = _uiState.value.conversionMode
                 val newMode = if (currentMode in modes) currentMode else ConversionMode.CURRENCY
-                _uiState.update { it.copy(enabledModes = modes, conversionMode = newMode) }
+                _uiState.update { it.copy(enabledModes = modes, conversionMode = newMode, modeHistory = it.modeHistory.filter { m -> m in modes }) }
                 viewModelScope.launch { repository.saveEnabledModes(modes) }
                 updateDisplay(); return
             }
@@ -845,7 +864,10 @@ class CalculatorViewModel(application: Application) : AndroidViewModel(applicati
                 firstOperand = null; pendingOp = null
                 bracketStack.clear(); expressionDisplay.clear()
                 justCalculated = true; shouldResetInput = false
-                _uiState.update { it.copy(isError = false, conversionMode = ConversionMode.CURRENCY) }
+                _uiState.update {
+                    val newHistory = if (it.conversionMode != ConversionMode.CURRENCY) it.modeHistory + it.conversionMode else it.modeHistory
+                    it.copy(isError = false, conversionMode = ConversionMode.CURRENCY, modeHistory = newHistory)
+                }
                 updateDisplay(); return
             }
             is CalculatorAction.SetLocalisationCountry -> {

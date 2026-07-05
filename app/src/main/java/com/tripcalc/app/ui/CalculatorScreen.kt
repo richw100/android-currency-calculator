@@ -257,6 +257,18 @@ fun AppScreen() {
     val vm: CalculatorViewModel = viewModel()
     val state by vm.uiState.collectAsStateWithLifecycle()
 
+    // OcrOverlayScreen installs its own BackHandler for its screen. This one covers every
+    // other sub-screen (return to the calculator) and, once there, steps back through the
+    // mode-chip history (e.g. Bill -> Temp -> back returns to Bill, not straight to Currency)
+    // so system back never falls through to exiting the app.
+    BackHandler(enabled = screen != Screen.Calculator || state.modeHistory.isNotEmpty()) {
+        if (screen != Screen.Calculator) {
+            screen = Screen.Calculator
+        } else {
+            vm.onAction(CalculatorAction.PopConversionMode)
+        }
+    }
+
     val systemDark = isSystemInDarkTheme()
     val effectiveIsDark = when (state.darkModePref) {
         DarkModePref.SYSTEM -> systemDark
