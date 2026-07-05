@@ -388,7 +388,7 @@ fun SettingsScreen(vm: CalculatorViewModel, modifier: Modifier = Modifier) {
                 Text("Active converters", color = colors.textPrimary, fontSize = 15.sp)
                 Text("Choose which modes appear in the tab bar", color = colors.textSecondary, fontSize = 12.sp)
                 Spacer(Modifier.height(10.dp))
-                ConversionMode.entries.forEach { mode ->
+                ConversionMode.entries.filter { it != ConversionMode.FUEL }.forEach { mode ->
                     val isEnabled = mode in state.enabledModes
                     val isCurrency = mode == ConversionMode.CURRENCY
                     Row(
@@ -423,20 +423,20 @@ fun SettingsScreen(vm: CalculatorViewModel, modifier: Modifier = Modifier) {
                 Spacer(Modifier.height(10.dp))
                 DistancePair.entries.forEach { dp ->
                     val isEnabled = dp in state.enabledDistancePairs
-                    val isMilesKm = dp == DistancePair.MILES_KM
+                    val isLocked = dp == DistancePair.MILES_KM || dp == DistancePair.MPG_L100KM || dp == DistancePair.MIKWH_KWH100KM
                     Row(
                         modifier = Modifier.fillMaxWidth().padding(vertical = 2.dp),
                         verticalAlignment = Alignment.CenterVertically
                     ) {
                         Text(
                             dp.settingsLabel,
-                            color = if (isMilesKm) colors.textMuted else colors.textPrimary,
+                            color = if (isLocked) colors.textMuted else colors.textPrimary,
                             fontSize = 14.sp,
                             modifier = Modifier.weight(1f)
                         )
                         Switch(
                             checked = isEnabled,
-                            enabled = !isMilesKm,
+                            enabled = !isLocked,
                             onCheckedChange = { checked ->
                                 val newPairs = if (checked) state.enabledDistancePairs + dp else state.enabledDistancePairs - dp
                                 vm.onAction(CalculatorAction.SetEnabledDistancePairs(newPairs))
@@ -506,7 +506,7 @@ fun SettingsScreen(vm: CalculatorViewModel, modifier: Modifier = Modifier) {
 
             Column(modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 12.dp)) {
                 Text("Fuel economy — gallons", color = colors.textPrimary, fontSize = 15.sp)
-                Text("Which gallon size to use for mpg conversions", color = colors.textSecondary, fontSize = 12.sp)
+                Text("Which gallon size to use for mpg conversions and the Car cost comparison", color = colors.textSecondary, fontSize = 12.sp)
                 Spacer(Modifier.height(10.dp))
                 Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                     listOf(true to "UK (Imperial)", false to "US").forEach { (isUk, label) ->

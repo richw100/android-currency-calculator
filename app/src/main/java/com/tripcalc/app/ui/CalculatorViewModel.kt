@@ -30,14 +30,19 @@ enum class ConversionMode(val tabLabel: String, val settingsLabel: String) {
     TIP("🧾 Bill",         "Tip & bill splitter"),
     TEMPERATURE("🌡 Temp", "Temperature converter"),
     DISTANCE("📐 Units",   "Unit converter"),
-    FUEL("⛽ mpg",         "Fuel economy")
+    FUEL("🚗 Car",         "Car: petrol vs electric cost comparison")
 }
 
-enum class FuelMode { MPG, KWH }
+enum class CarField(val label: String) {
+    FUEL_PRICE("Petrol price"),
+    ELECTRICITY_PRICE("Electricity price"),
+    MPG("Fuel economy"),
+    MI_PER_KWH("EV economy")
+}
 
 enum class UnitCategory(val label: String) {
     DISTANCE("Distance"), VOLUME("Volume"), WEIGHT("Weight"), SPEED("Speed"),
-    PRESSURE("Pressure"), ENERGY("Energy")
+    PRESSURE("Pressure"), ENERGY("Energy"), FUEL("Fuel economy")
 }
 
 enum class DistancePair(
@@ -45,7 +50,8 @@ enum class DistancePair(
     val toLabel: String,   val toAbbr: String,
     val factor: Double,
     val settingsLabel: String,
-    val category: UnitCategory
+    val category: UnitCategory,
+    val isReciprocal: Boolean = false
 ) {
     MILES_KM    ("Miles",      "mi",     "Kilometres",  "km",     1.60934,  "Miles ↔ Kilometres",     UnitCategory.DISTANCE),
     INCHES_CM   ("Inches",     "in",     "Centimetres", "cm",     2.54,     "Inches ↔ Centimetres",   UnitCategory.DISTANCE),
@@ -65,7 +71,9 @@ enum class DistancePair(
     OZ_G        ("Ounces",     "oz",     "Grams",       "g",      28.3495,  "Ounces ↔ Grams",         UnitCategory.WEIGHT),
     MPH_KPH     ("mph",        "mph",    "km/h",        "km/h",   1.60934,  "mph ↔ km/h",             UnitCategory.SPEED),
     PSI_BAR     ("PSI",        "psi",    "Bar",         "bar",    0.0689476,"PSI ↔ Bar",               UnitCategory.PRESSURE),
-    KCAL_KJ     ("kcal",       "kcal",   "Kilojoules",  "kJ",     4.18400,  "kcal ↔ kJ",              UnitCategory.ENERGY)
+    KCAL_KJ     ("kcal",       "kcal",   "Kilojoules",  "kJ",     4.18400,  "kcal ↔ kJ",              UnitCategory.ENERGY),
+    MPG_L100KM     ("mpg",    "mpg",    "L/100km",   "L/100km",  282.481,  "mpg ↔ L/100km",       UnitCategory.FUEL, isReciprocal = true),
+    MIKWH_KWH100KM ("mi/kWh", "mi/kWh", "kWh/100km", "kWh/100km", 62.1371, "mi/kWh ↔ kWh/100km",  UnitCategory.FUEL, isReciprocal = true)
 }
 
 enum class TempUnit(val label: String, val abbr: String) {
@@ -246,17 +254,24 @@ data class CalculatorUiState(
     val modeHistory: List<ConversionMode> = emptyList(),
     val distancePair: DistancePair = DistancePair.MILES_KM,
     val distanceReversed: Boolean = false,
-    val enabledDistancePairs: Set<DistancePair> = setOf(DistancePair.MILES_KM),
+    val enabledDistancePairs: Set<DistancePair> = setOf(DistancePair.MILES_KM, DistancePair.MPG_L100KM, DistancePair.MIKWH_KWH100KM),
     val tempUnit: TempUnit = TempUnit.CELSIUS,
     val defaultTipPercent: Double = 10.0,
     val tipPercent: Double = 10.0,
     val customTipPercent: Double = 12.5,
     val tipPeopleCount: Int = 1,
-    val fuelInputIsMpg: Boolean = true,
     val fuelUseUkGallons: Boolean = true,
-    val fuelMode: FuelMode = FuelMode.MPG,
+    val carTabUnlocked: Boolean = false,
+    val carUnlockPromptPending: Boolean = false,
+    val carActiveField: CarField = CarField.MPG,
+    val carTargetField: CarField? = null,
+    val carUseMetric: Boolean = false,
+    val carFuelPricePerLitre: String = "",
+    val carElectricityPricePerKwh: String = "",
+    val carMpg: String = "",
+    val carMiPerKwh: String = "",
     val swapZeroDot: Boolean = true,
-    val enabledModes: Set<ConversionMode> = ConversionMode.entries.toSet(),
+    val enabledModes: Set<ConversionMode> = ConversionMode.entries.toSet() - ConversionMode.FUEL,
     val cardProfiles: List<CardProfile> = emptyList(),
     val activeCardId: String? = null,
     val sizeCategory: SizeCategory = SizeCategory.SHOE,
@@ -321,9 +336,12 @@ sealed class CalculatorAction {
     data class SetTipPercent(val percent: Double) : CalculatorAction()
     data class SetTipPeople(val count: Int) : CalculatorAction()
     data class SetCustomTipPercent(val percent: Double) : CalculatorAction()
-    object SwapFuelDirection : CalculatorAction()
     data class SetFuelUseUkGallons(val useUk: Boolean) : CalculatorAction()
-    data class SetFuelMode(val mode: FuelMode) : CalculatorAction()
+    data class SetCarActiveField(val field: CarField) : CalculatorAction()
+    object ResetCarFields : CalculatorAction()
+    object ConfirmCarUnlockToggle : CalculatorAction()
+    object DismissCarUnlockPrompt : CalculatorAction()
+    object ToggleCarUseMetric : CalculatorAction()
     data class SetSwapZeroDot(val enabled: Boolean) : CalculatorAction()
     data class SetEnabledModes(val modes: Set<ConversionMode>) : CalculatorAction()
     data class SetDefaultTipPercent(val percent: Double) : CalculatorAction()
@@ -372,6 +390,7 @@ class CalculatorViewModel(application: Application) : AndroidViewModel(applicati
     private var shouldResetInput = false
     private var tipSavedBill: String? = null
     private var lastCalcExpression = ""
+    private val secretCarCode = "98741235"
 
     private fun restoreTipBillIfNeeded(mode: ConversionMode) {
         if (mode == ConversionMode.TIP && tipSavedBill != null) {
@@ -406,6 +425,8 @@ class CalculatorViewModel(application: Application) : AndroidViewModel(applicati
             val defaultTipPercent = repository.loadDefaultTipPercent()
             val customTipPercent = repository.loadCustomTipPercent()
             val fuelUseUkGallons = repository.loadFuelUseUkGallons()
+            val carTabUnlocked = repository.loadCarTabUnlocked()
+            val carUseMetric = repository.loadCarUseMetric()
             val swapZeroDot = repository.loadSwapZeroDot()
             val enabledModes = repository.loadEnabledModes()
             val enabledDistancePairs = repository.loadEnabledDistancePairs()
@@ -428,7 +449,7 @@ class CalculatorViewModel(application: Application) : AndroidViewModel(applicati
             val tipPresets = repository.loadTipPresets()
             val locCountryCode = localisationRepository.loadCountryCode()
             val locRecentCountries = localisationRepository.loadRecentCountries()
-            _uiState.update { it.copy(toCurrency = to, fromCurrency = from, recentCurrencies = recents, customRates = customRates, hapticEnabled = hapticEnabled, history = history, darkModePref = darkModePref, accentScheme = accentScheme, defaultTipPercent = defaultTipPercent, tipPercent = defaultTipPercent, customTipPercent = customTipPercent, fuelUseUkGallons = fuelUseUkGallons, swapZeroDot = swapZeroDot, enabledModes = enabledModes, enabledDistancePairs = enabledDistancePairs, cardProfiles = cardProfiles, activeCardId = activeCardId, sizeCategory = sizeCategory, shoeIsMens = shoeIsMens, shoeFromCountry = shoeFrom, shoeToCountry = shoeTo, womensFromCountry = womensFrom, womensToCountry = womensTo, mensFromCountry = mensFrom, mensToCountry = mensTo, helpHintSeen = helpHintSeen, ocrConvertEnabled = ocrConvertEnabled, taxEnabled = taxEnabled, taxCountryCode = taxCountryCode, taxStateCode = taxStateCode, taxRateOverride = taxRateOverride, taxApplied = taxApplied, tipAfterTax = tipAfterTax, noTip = noTip, tipPresets = tipPresets, localisationCountryCode = locCountryCode, localisationRecentCountries = locRecentCountries) }
+            _uiState.update { it.copy(toCurrency = to, fromCurrency = from, recentCurrencies = recents, customRates = customRates, hapticEnabled = hapticEnabled, history = history, darkModePref = darkModePref, accentScheme = accentScheme, defaultTipPercent = defaultTipPercent, tipPercent = defaultTipPercent, customTipPercent = customTipPercent, fuelUseUkGallons = fuelUseUkGallons, carTabUnlocked = carTabUnlocked, carUseMetric = carUseMetric, swapZeroDot = swapZeroDot, enabledModes = enabledModes, enabledDistancePairs = enabledDistancePairs, cardProfiles = cardProfiles, activeCardId = activeCardId, sizeCategory = sizeCategory, shoeIsMens = shoeIsMens, shoeFromCountry = shoeFrom, shoeToCountry = shoeTo, womensFromCountry = womensFrom, womensToCountry = womensTo, mensFromCountry = mensFrom, mensToCountry = mensTo, helpHintSeen = helpHintSeen, ocrConvertEnabled = ocrConvertEnabled, taxEnabled = taxEnabled, taxCountryCode = taxCountryCode, taxStateCode = taxStateCode, taxRateOverride = taxRateOverride, taxApplied = taxApplied, tipAfterTax = tipAfterTax, noTip = noTip, tipPresets = tipPresets, localisationCountryCode = locCountryCode, localisationRecentCountries = locRecentCountries) }
             refreshCurrentTaxInfo()
             fetchRates(forceRefresh = false)
         }
@@ -507,7 +528,8 @@ class CalculatorViewModel(application: Application) : AndroidViewModel(applicati
             is CalculatorAction.Calculate -> {
                 handleCalculate()
                 updateDisplay()
-                if (!_uiState.value.isError && _uiState.value.display != "0") recordHistory()
+                if (!_uiState.value.isError && _uiState.value.display != "0" &&
+                    _uiState.value.conversionMode != ConversionMode.FUEL) recordHistory()
                 return
             }
             is CalculatorAction.Percent -> handlePercent()
@@ -648,7 +670,7 @@ class CalculatorViewModel(application: Application) : AndroidViewModel(applicati
                 updateDisplay(); return
             }
             is CalculatorAction.SetEnabledDistancePairs -> {
-                val pairs = (action.pairs + DistancePair.MILES_KM)
+                val pairs = (action.pairs + DistancePair.MILES_KM + DistancePair.MPG_L100KM + DistancePair.MIKWH_KWH100KM)
                 val current = _uiState.value.distancePair
                 val newPair = if (current in pairs) current else DistancePair.MILES_KM
                 _uiState.update { it.copy(enabledDistancePairs = pairs, distancePair = newPair) }
@@ -673,17 +695,71 @@ class CalculatorViewModel(application: Application) : AndroidViewModel(applicati
                 viewModelScope.launch { repository.saveCustomTipPercent(action.percent) }
                 updateDisplay(); return
             }
-            is CalculatorAction.SwapFuelDirection -> {
-                _uiState.update { it.copy(fuelInputIsMpg = !it.fuelInputIsMpg) }
-                updateDisplay(); return
-            }
             is CalculatorAction.SetFuelUseUkGallons -> {
                 _uiState.update { it.copy(fuelUseUkGallons = action.useUk) }
                 viewModelScope.launch { repository.saveFuelUseUkGallons(action.useUk) }
                 updateDisplay(); return
             }
-            is CalculatorAction.SetFuelMode -> {
-                _uiState.update { it.copy(fuelMode = action.mode, fuelInputIsMpg = true) }
+            is CalculatorAction.SetCarActiveField -> {
+                val s = _uiState.value
+                if (action.field == s.carActiveField) return
+                val stored = when (action.field) {
+                    CarField.FUEL_PRICE -> s.carFuelPricePerLitre
+                    CarField.ELECTRICITY_PRICE -> s.carElectricityPricePerKwh
+                    CarField.MPG -> s.carMpg
+                    CarField.MI_PER_KWH -> s.carMiPerKwh
+                }
+                currentInput = stored.ifEmpty { "0" }
+                firstOperand = null; pendingOp = null
+                bracketStack.clear(); expressionDisplay.clear()
+                justCalculated = true; shouldResetInput = false
+                _uiState.update { it.copy(carActiveField = action.field) }
+                updateDisplay(); return
+            }
+            CalculatorAction.ResetCarFields -> {
+                currentInput = "0"
+                firstOperand = null; pendingOp = null
+                bracketStack.clear(); expressionDisplay.clear()
+                justCalculated = false; shouldResetInput = false
+                _uiState.update { it.copy(
+                    carFuelPricePerLitre = "", carElectricityPricePerKwh = "",
+                    carMpg = "", carMiPerKwh = "", carTargetField = null
+                ) }
+                updateDisplay(); return
+            }
+            CalculatorAction.ConfirmCarUnlockToggle -> {
+                val unlocked = !_uiState.value.carTabUnlocked
+                _uiState.update { it.copy(carTabUnlocked = unlocked, carUnlockPromptPending = false) }
+                viewModelScope.launch { repository.saveCarTabUnlocked(unlocked) }
+                return
+            }
+            CalculatorAction.DismissCarUnlockPrompt -> {
+                _uiState.update { it.copy(carUnlockPromptPending = false) }
+                return
+            }
+            CalculatorAction.ToggleCarUseMetric -> {
+                val s = _uiState.value
+                val newMetric = !s.carUseMetric
+                val gallonLitres = if (s.fuelUseUkGallons) 4.54609 else 3.78541
+                val mpgFactor = if (s.fuelUseUkGallons) 282.481 else 235.214
+                fun reciprocal(v: String, factor: Double) =
+                    v.toDoubleOrNull()?.takeIf { it > 0 }?.let { formatResult(factor / it) } ?: v
+                val newMpg = reciprocal(s.carMpg, mpgFactor)
+                val newMiPerKwh = reciprocal(s.carMiPerKwh, 62.1371)
+                val newFuelPrice = s.carFuelPricePerLitre.toDoubleOrNull()
+                    ?.let { formatResult(if (newMetric) it / gallonLitres else it * gallonLitres) }
+                    ?: s.carFuelPricePerLitre
+                currentInput = when (s.carActiveField) {
+                    CarField.MPG -> newMpg
+                    CarField.MI_PER_KWH -> newMiPerKwh
+                    CarField.FUEL_PRICE -> newFuelPrice
+                    CarField.ELECTRICITY_PRICE -> currentInput
+                }.ifEmpty { "0" }
+                _uiState.update { it.copy(
+                    carUseMetric = newMetric, carMpg = newMpg,
+                    carMiPerKwh = newMiPerKwh, carFuelPricePerLitre = newFuelPrice
+                ) }
+                viewModelScope.launch { repository.saveCarUseMetric(newMetric) }
                 updateDisplay(); return
             }
             is CalculatorAction.SetSwapZeroDot -> {
@@ -913,6 +989,10 @@ class CalculatorViewModel(application: Application) : AndroidViewModel(applicati
         currentInput = if (currentInput == "0") digit.toString()
         else if (currentInput.length < 12) currentInput + digit.toString()
         else currentInput
+        if (currentInput == secretCarCode) {
+            currentInput = "0"
+            _uiState.update { it.copy(carUnlockPromptPending = true) }
+        }
     }
 
     private fun handleDecimal() {
@@ -1089,22 +1169,14 @@ class CalculatorViewModel(application: Application) : AndroidViewModel(applicati
                 ConversionMode.DISTANCE -> distFrom
                 ConversionMode.TEMPERATURE -> state.tempUnit.abbr
                 ConversionMode.TIP -> "$pctLabel%"
-                ConversionMode.FUEL -> if (state.fuelMode == FuelMode.KWH) {
-                    if (state.fuelInputIsMpg) "mi/kWh" else "kWh/100km"
-                } else {
-                    if (state.fuelInputIsMpg) (if (state.fuelUseUkGallons) "mpg (UK)" else "mpg (US)") else "L/100km"
-                }
+                ConversionMode.FUEL -> "car"   // unreachable: Car-tab calculations don't call recordHistory()
                 ConversionMode.CURRENCY -> state.fromCurrency
             },
             toCurrency = when (state.conversionMode) {
                 ConversionMode.DISTANCE -> distTo
                 ConversionMode.TEMPERATURE -> toTempUnit.abbr
                 ConversionMode.TIP -> "${state.tipPeopleCount}p"
-                ConversionMode.FUEL -> if (state.fuelMode == FuelMode.KWH) {
-                    if (state.fuelInputIsMpg) "kWh/100km" else "mi/kWh"
-                } else {
-                    if (state.fuelInputIsMpg) "L/100km" else (if (state.fuelUseUkGallons) "mpg (UK)" else "mpg (US)")
-                }
+                ConversionMode.FUEL -> "car"   // unreachable: Car-tab calculations don't call recordHistory()
                 ConversionMode.CURRENCY -> state.toCurrency
             },
             timestamp = System.currentTimeMillis(),
@@ -1149,7 +1221,7 @@ class CalculatorViewModel(application: Application) : AndroidViewModel(applicati
             ConversionMode.DISTANCE -> updateDistanceDisplay()
             ConversionMode.TEMPERATURE -> updateTempDisplay()
             ConversionMode.TIP -> updateTipDisplay()
-            ConversionMode.FUEL -> updateFuelDisplay()
+            ConversionMode.FUEL -> updateCarDisplay()
             ConversionMode.CURRENCY -> updateCurrencyDisplay()
         }
     }
@@ -1272,6 +1344,21 @@ class CalculatorViewModel(application: Application) : AndroidViewModel(applicati
             }
             return
         }
+        if (pair.isReciprocal) {
+            val effectiveFactor = if (pair == DistancePair.MPG_L100KM) (if (s.fuelUseUkGallons) 282.481 else 235.214) else pair.factor
+            val fromAbbr = if (s.distanceReversed) pair.toAbbr else pair.fromAbbr
+            val toAbbr   = if (s.distanceReversed) pair.fromAbbr else pair.toAbbr
+            val converted = if (value > 0) effectiveFactor / value else 0.0
+            _uiState.update {
+                it.copy(
+                    fromAmount = "$fromAbbr ${"%.2f".format(Locale.US, value)}",
+                    toAmount = "$toAbbr ${"%.2f".format(Locale.US, converted)}",
+                    exchangeRateLabel = "${"%.2f".format(Locale.US, effectiveFactor)} ÷ $fromAbbr = $toAbbr",
+                    customRatePctDiff = null
+                )
+            }
+            return
+        }
         val useLitres = s.distanceUseLitres && pair.toAbbr == "ml"
         val baseFactor = if (useLitres) pair.factor / 1000.0 else pair.factor
         val fromAbbr = if (s.distanceReversed) (if (useLitres) "L" else pair.toAbbr) else pair.fromAbbr
@@ -1325,40 +1412,86 @@ class CalculatorViewModel(application: Application) : AndroidViewModel(applicati
         }
     }
 
-    private fun updateFuelDisplay() {
-        val value = currentInput.toDoubleOrNull() ?: 0.0
-        val state = _uiState.value
-        if (state.fuelMode == FuelMode.KWH) {
-            val kwhFactor = 62.1371  // 100 / 1.60934
-            val (fromAbbr, toAbbr) = if (state.fuelInputIsMpg)
-                Pair("mi/kWh", "kWh/100km") else Pair("kWh/100km", "mi/kWh")
-            val converted = if (value > 0) kwhFactor / value else 0.0
-            val rateLabel = if (state.fuelInputIsMpg)
-                "62.14 ÷ mi/kWh = kWh/100km" else "62.14 ÷ kWh/100km = mi/kWh"
-            _uiState.update {
-                it.copy(
-                    fromAmount = "$fromAbbr ${"%.2f".format(Locale.US, value)}",
-                    toAmount = "$toAbbr ${"%.2f".format(Locale.US, converted)}",
-                    exchangeRateLabel = rateLabel,
-                    customRatePctDiff = null
-                )
+    private fun solveMissingCarValue(target: CarField, fpGal: Double?, ep: Double?, mpg: Double?, mikwh: Double?): Double? {
+        fun ok(v: Double?) = v != null && v > 0.0
+        return when (target) {
+            CarField.MPG               -> if (ok(fpGal) && ok(mikwh) && ok(ep)) fpGal!! * mikwh!! / ep!! else null
+            CarField.MI_PER_KWH        -> if (ok(ep) && ok(mpg) && ok(fpGal))   ep!! * mpg!! / fpGal!!   else null
+            CarField.FUEL_PRICE        -> if (ok(mpg) && ok(ep) && ok(mikwh))   mpg!! * ep!! / mikwh!!    else null
+            CarField.ELECTRICITY_PRICE -> if (ok(mikwh) && ok(fpGal) && ok(mpg)) mikwh!! * fpGal!! / mpg!! else null
+        }
+    }
+
+    private fun updateCarDisplay() {
+        val s = _uiState.value
+        // Displayed values: mpg/mi-kWh are shown in metric (L/100km, kWh/100km) when
+        // carUseMetric is on, imperial otherwise; fuel price is per-litre when metric,
+        // per-gallon (UK/US) otherwise. The break-even math always runs in a fixed
+        // canonical basis (mpg, mi/kWh, price-per-gallon) — toMpg/toMiKwh/toGalPrice
+        // convert display values into that basis, and results are converted back.
+        var fpDisplay = s.carFuelPricePerLitre
+        var epDisplay = s.carElectricityPricePerKwh
+        var mpgDisplay = s.carMpg
+        var mikwhDisplay = s.carMiPerKwh
+        when (s.carActiveField) {
+            CarField.FUEL_PRICE -> fpDisplay = currentInput
+            CarField.ELECTRICITY_PRICE -> epDisplay = currentInput
+            CarField.MPG -> mpgDisplay = currentInput
+            CarField.MI_PER_KWH -> mikwhDisplay = currentInput
+        }
+
+        val gallonLitres = if (s.fuelUseUkGallons) 4.54609 else 3.78541
+        val mpgFactor = if (s.fuelUseUkGallons) 282.481 else 235.214
+        val kwhFactor = 62.1371
+        // mpg <-> L/100km and mi/kWh <-> kWh/100km are both reciprocal (constant / value),
+        // so the same formula converts either direction between imperial and metric.
+        fun toMpg(v: String) = if (s.carUseMetric) v.toDoubleOrNull()?.takeIf { it > 0 }?.let { mpgFactor / it } else v.toDoubleOrNull()
+        fun toMiKwh(v: String) = if (s.carUseMetric) v.toDoubleOrNull()?.takeIf { it > 0 }?.let { kwhFactor / it } else v.toDoubleOrNull()
+        fun toGalPrice(v: String) = v.toDoubleOrNull()?.let { if (s.carUseMetric) it * gallonLitres else it }
+
+        fun blank(v: String) = v.toDoubleOrNull().let { it == null || it <= 0.0 }
+
+        var target = s.carTargetField
+        if (target == s.carActiveField) target = null
+        if (target == null) {
+            val values = mapOf(
+                CarField.FUEL_PRICE to fpDisplay, CarField.ELECTRICITY_PRICE to epDisplay,
+                CarField.MPG to mpgDisplay, CarField.MI_PER_KWH to mikwhDisplay
+            )
+            target = CarField.entries.firstOrNull { it != s.carActiveField && blank(values.getValue(it)) }
+        }
+
+        if (target != null) {
+            val fpGal = toGalPrice(fpDisplay)
+            val mpgCanon = toMpg(mpgDisplay)
+            val mikwhCanon = toMiKwh(mikwhDisplay)
+            val solved = solveMissingCarValue(target, fpGal, epDisplay.toDoubleOrNull(), mpgCanon, mikwhCanon)
+            if (solved != null) {
+                when (target) {
+                    CarField.FUEL_PRICE -> fpDisplay = formatResult(if (s.carUseMetric) solved / gallonLitres else solved)
+                    CarField.ELECTRICITY_PRICE -> epDisplay = formatResult(solved)
+                    CarField.MPG -> mpgDisplay = formatResult(if (s.carUseMetric) mpgFactor / solved else solved)
+                    CarField.MI_PER_KWH -> mikwhDisplay = formatResult(if (s.carUseMetric) kwhFactor / solved else solved)
+                }
             }
-        } else {
-            val factor = if (state.fuelUseUkGallons) 282.481 else 235.214
-            val mpgLabel = if (state.fuelUseUkGallons) "mpg (UK)" else "mpg (US)"
-            val (fromAbbr, toAbbr) = if (state.fuelInputIsMpg)
-                Pair(mpgLabel, "L/100km") else Pair("L/100km", mpgLabel)
-            val converted = if (value > 0) factor / value else 0.0
-            val rateLabel = if (state.fuelInputIsMpg)
-                "${factor.toInt()} ÷ mpg = L/100km" else "${factor.toInt()} ÷ L/100km = $mpgLabel"
-            _uiState.update {
-                it.copy(
-                    fromAmount = "$fromAbbr ${"%.2f".format(Locale.US, value)}",
-                    toAmount = "$toAbbr ${"%.2f".format(Locale.US, converted)}",
-                    exchangeRateLabel = rateLabel,
-                    customRatePctDiff = null
-                )
-            }
+        }
+
+        val fpGalV = toGalPrice(fpDisplay)
+        val mpgCanonV = toMpg(mpgDisplay)
+        val mikwhCanonV = toMiKwh(mikwhDisplay)
+        val epv = epDisplay.toDoubleOrNull()
+        val costFuel = if (fpGalV != null && mpgCanonV != null && mpgCanonV > 0) fpGalV / mpgCanonV else null
+        val costElec = if (epv != null && mikwhCanonV != null && mikwhCanonV > 0) epv / mikwhCanonV else null
+
+        _uiState.update {
+            it.copy(
+                carFuelPricePerLitre = fpDisplay, carElectricityPricePerKwh = epDisplay,
+                carMpg = mpgDisplay, carMiPerKwh = mikwhDisplay, carTargetField = target,
+                fromAmount = costFuel?.let { c -> "Petrol ${"%.3f".format(Locale.US, c)}/mi" } ?: "Petrol —",
+                toAmount = costElec?.let { c -> "Electric ${"%.3f".format(Locale.US, c)}/mi" } ?: "Electric —",
+                exchangeRateLabel = "",
+                customRatePctDiff = null
+            )
         }
     }
 }

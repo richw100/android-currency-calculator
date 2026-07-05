@@ -88,6 +88,7 @@ import androidx.compose.ui.text.TextStyle
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.window.Dialog
+import androidx.compose.ui.text.font.FontStyle
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
@@ -552,7 +553,7 @@ fun AboutScreen(modifier: Modifier = Modifier) {
         Spacer(Modifier.height(16.dp))
 
         Text(
-            text = "Also includes a tip calculator, fuel economy converter, distance and temperature tools, and an international clothing and shoe size guide — everything you need when you're away from home.",
+            text = "Also includes a tip calculator, car running-cost comparison, distance and temperature tools, and an international clothing and shoe size guide — everything you need when you're away from home.",
             color = colors.textSecondary,
             fontSize = 15.sp,
             textAlign = TextAlign.Center,
@@ -673,9 +674,29 @@ fun CalculatorScreen(vm: CalculatorViewModel = viewModel(), modifier: Modifier =
         )
     }
 
+    if (state.carUnlockPromptPending) {
+        AlertDialog(
+            onDismissRequest = { vm.onAction(CalculatorAction.DismissCarUnlockPrompt) },
+            title = { Text(if (state.carTabUnlocked) "Disable Car tab?" else "Enable Car tab?") },
+            text = { Text("This is a hidden test feature not ready for release.") },
+            confirmButton = {
+                TextButton(onClick = { vm.onAction(CalculatorAction.ConfirmCarUnlockToggle) }) {
+                    Text(if (state.carTabUnlocked) "Disable" else "Enable", color = colors.operator)
+                }
+            },
+            dismissButton = {
+                TextButton(onClick = { vm.onAction(CalculatorAction.DismissCarUnlockPrompt) }) {
+                    Text("Cancel", color = colors.textSecondary)
+                }
+            }
+        )
+    }
+
     Column(modifier = modifier.fillMaxSize()) {
         // Mode toggle — only show enabled modes (CURRENCY always first)
-        val visibleModes = ConversionMode.entries.filter { it in state.enabledModes }
+        val visibleModes = ConversionMode.entries.filter {
+            if (it == ConversionMode.FUEL) state.carTabUnlocked else it in state.enabledModes
+        }
         val segmentColors = SegmentedButtonDefaults.colors(
             activeContainerColor   = colors.operator,
             activeContentColor     = colors.operatorContent,
@@ -884,13 +905,18 @@ fun CalculatorScreen(vm: CalculatorViewModel = viewModel(), modifier: Modifier =
             onSetTaxState = { vm.onAction(CalculatorAction.SetTaxState(it)) },
             onSetTaxRateOverride = { vm.onAction(CalculatorAction.SetTaxRateOverride(it)) }
         )
-        ConversionMode.FUEL -> FuelConversionRow(
-            inputIsMpg = state.fuelInputIsMpg,
+        ConversionMode.FUEL -> CarConversionRow(
+            activeField = state.carActiveField,
+            targetField = state.carTargetField,
+            fuelPrice = state.carFuelPricePerLitre,
+            electricityPrice = state.carElectricityPricePerKwh,
+            mpg = state.carMpg,
+            miPerKwh = state.carMiPerKwh,
             useUkGallons = state.fuelUseUkGallons,
-            fuelMode = state.fuelMode,
-            rateLabel = state.exchangeRateLabel,
-            onSwap = { vm.onAction(CalculatorAction.SwapFuelDirection) },
-            onSetFuelMode = { vm.onAction(CalculatorAction.SetFuelMode(it)) }
+            useMetric = state.carUseMetric,
+            onSelectField = { vm.onAction(CalculatorAction.SetCarActiveField(it)) },
+            onReset = { vm.onAction(CalculatorAction.ResetCarFields) },
+            onToggleMetric = { vm.onAction(CalculatorAction.ToggleCarUseMetric) }
         )
         }
 
@@ -1790,76 +1816,92 @@ private fun TipBreakdownDisplay(
 
 // ── Fuel economy conversion row ───────────────────────────────────────────────
 
-@OptIn(ExperimentalMaterial3Api::class)
 @Composable
-private fun FuelConversionRow(
-    inputIsMpg: Boolean,
+private fun CarConversionRow(
+    activeField: CarField,
+    targetField: CarField?,
+    fuelPrice: String,
+    electricityPrice: String,
+    mpg: String,
+    miPerKwh: String,
     useUkGallons: Boolean,
-    fuelMode: FuelMode,
-    rateLabel: String,
-    onSwap: () -> Unit,
-    onSetFuelMode: (FuelMode) -> Unit
+    useMetric: Boolean,
+    onSelectField: (CarField) -> Unit,
+    onReset: () -> Unit,
+    onToggleMetric: () -> Unit
 ) {
     val colors = LocalAppColors.current
-    val (fromLabel, toLabel) = when (fuelMode) {
-        FuelMode.KWH -> if (inputIsMpg) Pair("mi/kWh", "kWh/100km") else Pair("kWh/100km", "mi/kWh")
-        FuelMode.MPG -> {
-            val mpgLabel = if (useUkGallons) "mpg (UK)" else "mpg (US)"
-            if (inputIsMpg) Pair(mpgLabel, "L/100km") else Pair("L/100km", mpgLabel)
-        }
-    }
-    val tooltipState = rememberTooltipState()
-    val scope = rememberCoroutineScope()
-    Column(modifier = Modifier.fillMaxWidth()) {
-        Row(
-            modifier = Modifier.fillMaxWidth().padding(horizontal = 12.dp, vertical = 4.dp),
-            horizontalArrangement = Arrangement.spacedBy(8.dp),
-            verticalAlignment = Alignment.CenterVertically
+    val fuelUnit = if (useMetric) "/L" else "/${if (useUkGallons) "UK gal" else "US gal"}"
+    val economyUnit = if (useMetric) "L/100km" else "mpg"
+    val evUnit = if (useMetric) "kWh/100km" else "mi/kWh"
+
+    @Composable
+    fun FieldBox(field: CarField, valueStr: String, unit: String) {
+        val isActive = field == activeField
+        val isCalculated = field == targetField
+        Column(
+            modifier = Modifier
+                .fillMaxWidth()
+                .border(
+                    width = if (isActive) 2.dp else 1.dp,
+                    color = if (isActive) colors.operator else colors.inputBorder,
+                    shape = RoundedCornerShape(8.dp)
+                )
+                .clickable { onSelectField(field) }
+                .padding(horizontal = 12.dp, vertical = 8.dp)
         ) {
-            if (fuelMode == FuelMode.MPG) {
-                TooltipBox(
-                    positionProvider = TooltipDefaults.rememberPlainTooltipPositionProvider(),
-                    tooltip = { PlainTooltip { Text("Change UK or US gallons in Settings") } },
-                    state = tooltipState
-                ) {
-                    IconButton(onClick = { scope.launch { tooltipState.show() } }) {
-                        Icon(Icons.Default.Info, contentDescription = "Gallons info", tint = colors.textMuted, modifier = Modifier.size(18.dp))
-                    }
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                Text(field.label, color = colors.textSecondary, fontSize = 11.sp, modifier = Modifier.weight(1f), maxLines = 1, overflow = TextOverflow.Ellipsis)
+                if (isCalculated) {
+                    Text("calculated", color = colors.textMuted, fontSize = 10.sp, fontStyle = FontStyle.Italic)
                 }
             }
-            androidx.compose.foundation.layout.Box(
-                modifier = Modifier.weight(1f).border(1.dp, colors.inputBorder, RoundedCornerShape(8.dp)).padding(horizontal = 12.dp, vertical = 10.dp)
-            ) { Text("From: $fromLabel", color = colors.textPrimary, fontSize = 13.sp, maxLines = 1) }
-            IconButton(onClick = onSwap) {
-                Icon(Icons.Default.SwapHoriz, contentDescription = "Swap direction", tint = colors.textSecondary)
-            }
-            androidx.compose.foundation.layout.Box(
-                modifier = Modifier.weight(1f).border(1.dp, colors.inputBorder, RoundedCornerShape(8.dp)).padding(horizontal = 12.dp, vertical = 10.dp)
-            ) { Text("To: $toLabel", color = colors.textPrimary, fontSize = 13.sp, maxLines = 1) }
+            Text(
+                text = "${"%.3f".format(Locale.US, valueStr.toDoubleOrNull() ?: 0.0)} $unit",
+                color = if (isCalculated) colors.textMuted else colors.textPrimary,
+                fontSize = 16.sp
+            )
+        }
+    }
+
+    Column(modifier = Modifier.fillMaxWidth().padding(horizontal = 12.dp, vertical = 4.dp)) {
+        Text("Petrol vs Electric", color = colors.textPrimary, fontSize = 13.sp, fontWeight = FontWeight.Medium)
+        Spacer(Modifier.height(4.dp))
+        Row(horizontalArrangement = Arrangement.spacedBy(8.dp), modifier = Modifier.fillMaxWidth()) {
+            Box(Modifier.weight(1f)) { FieldBox(CarField.FUEL_PRICE, fuelPrice, fuelUnit) }
+            Box(Modifier.weight(1f)) { FieldBox(CarField.MPG, mpg, economyUnit) }
+        }
+        Spacer(Modifier.height(6.dp))
+        Row(horizontalArrangement = Arrangement.spacedBy(8.dp), modifier = Modifier.fillMaxWidth()) {
+            Box(Modifier.weight(1f)) { FieldBox(CarField.ELECTRICITY_PRICE, electricityPrice, "/kWh") }
+            Box(Modifier.weight(1f)) { FieldBox(CarField.MI_PER_KWH, miPerKwh, evUnit) }
         }
         Row(
-            modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 2.dp),
-            horizontalArrangement = Arrangement.spacedBy(8.dp),
+            modifier = Modifier.fillMaxWidth().padding(top = 4.dp),
             verticalAlignment = Alignment.CenterVertically
         ) {
-            FuelMode.entries.forEach { mode ->
-                val label = if (mode == FuelMode.MPG) "mpg / L" else "mi/kWh"
-                val selected = fuelMode == mode
-                FilterChip(
-                    selected = selected,
-                    onClick = { onSetFuelMode(mode) },
-                    label = { Text(label, fontSize = 11.sp) },
-                    colors = FilterChipDefaults.filterChipColors(
-                        selectedContainerColor = colors.operator,
-                        selectedLabelColor = colors.operatorContent,
-                        containerColor = colors.surface,
-                        labelColor = colors.textSecondary
-                    )
-                )
+            TextButton(onClick = onReset, contentPadding = PaddingValues(horizontal = 8.dp, vertical = 0.dp)) {
+                Text("Reset", color = colors.operator, fontSize = 12.sp)
             }
-            if (rateLabel.isNotEmpty()) {
-                Text(rateLabel, color = colors.textSecondary, fontSize = 11.sp, modifier = Modifier.weight(1f), maxLines = 1)
-            }
+            Text("Metric units", color = colors.textSecondary, fontSize = 12.sp, modifier = Modifier.weight(1f))
+            Switch(
+                checked = useMetric,
+                onCheckedChange = { onToggleMetric() },
+                modifier = Modifier.layout { measurable, constraints ->
+                    val s = 0.6f
+                    val p = measurable.measure(constraints)
+                    val w = (p.width * s).toInt()
+                    val h = (p.height * s).toInt()
+                    layout(w, h) {
+                        p.placeWithLayer(
+                            x = -((p.width - w) / 2),
+                            y = -((p.height - h) / 2),
+                            layerBlock = { scaleX = s; scaleY = s }
+                        )
+                    }
+                },
+                colors = SwitchDefaults.colors(checkedThumbColor = Color.White, checkedTrackColor = colors.positiveColor)
+            )
         }
     }
 }
@@ -2406,16 +2448,18 @@ fun HelpScreen(modifier: Modifier = Modifier) {
             HelpItem("Default tip %", "Sets the tip percentage pre-selected when you open the Tip tab. Set in Settings → Default tip %")
         }
 
-        HelpSection("Fuel Calculator") {
-            HelpItem("Mode", "Use the mpg / L chip for petrol and diesel cars, or mi/kWh for electric vehicles.")
-            HelpItem("mpg / L", "Converts between miles per gallon and litres per 100 km. Tap ⇄ to flip direction.")
-            HelpItem("mi/kWh", "Converts between miles per kWh and kWh per 100 km — the two most common EV efficiency units.")
-            HelpItem("UK vs US gallons", "Toggle between UK imperial gallons and US gallons in Settings → Fuel (mpg mode only).")
+        HelpSection("Car Cost Comparison") {
+            HelpItem("What it does", "Compares the running cost of a petrol/diesel car against an equivalent electric car, using current fuel and electricity prices.")
+            HelpItem("Entering values", "Tap any of the 4 boxes to make it active, then type on the keypad. Fill in any 3 and the 4th is calculated automatically.")
+            HelpItem("Calculated field", "The box marked 'calculated' updates live as you change the other three. Tap it to type into it directly instead.")
+            HelpItem("Metric units", "Use the Metric units switch to enter fuel economy in L/100km and EV economy in kWh/100km instead of mpg and mi/kWh.")
+            HelpItem("UK vs US gallons", "In imperial mode, toggle between UK imperial gallons and US gallons in Settings → Fuel economy — gallons.")
+            HelpItem("Reset", "Tap Reset to clear all 4 values and start a new comparison.")
         }
 
         HelpSection("Units Converter") {
             HelpItem("Converting", "Enter a value in the From unit; the To unit updates live. Tap ⇄ to swap direction.")
-            HelpItem("Choosing a conversion", "Use the dropdown to pick from distance, volume, weight, speed, pressure, and energy conversions.")
+            HelpItem("Choosing a conversion", "Use the dropdown to pick from distance, volume, weight, speed, pressure, energy, and fuel economy conversions — including mpg ↔ L/100km and mi/kWh ↔ kWh/100km, moved here from the old Fuel tab.")
             HelpItem("Stone + lb", "For Stone ↔ kg, the main keypad enters stone and the − / + buttons adjust the remaining pounds (0–13).")
             HelpItem("Litres toggle", "For conversions that output millilitres, a toggle switches the result to litres instead.")
             HelpItem("Enabling pairs", "Show or hide individual unit pairs in Settings → Unit converter pairs.")

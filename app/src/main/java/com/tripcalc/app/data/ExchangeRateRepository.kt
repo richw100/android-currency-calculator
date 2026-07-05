@@ -216,10 +216,28 @@ class ExchangeRateRepository(private val context: Context) {
 
     suspend fun loadEnabledModes(): Set<ConversionMode> {
         val names = context.dataStore.data.first()[enabledModesKey]
-            ?: return ConversionMode.entries.toSet()
-        return names.mapNotNull { name -> ConversionMode.entries.find { it.name == name } }.toSet()
-            .ifEmpty { ConversionMode.entries.toSet() }
+            ?: return ConversionMode.entries.toSet() - ConversionMode.FUEL
+        return (names.mapNotNull { name -> ConversionMode.entries.find { it.name == name } }.toSet() - ConversionMode.FUEL)
+            .ifEmpty { ConversionMode.entries.toSet() - ConversionMode.FUEL }
     }
+
+    private val carTabUnlockedKey = booleanPreferencesKey("car_tab_unlocked")
+
+    suspend fun saveCarTabUnlocked(unlocked: Boolean) {
+        context.dataStore.edit { it[carTabUnlockedKey] = unlocked }
+    }
+
+    suspend fun loadCarTabUnlocked(): Boolean =
+        context.dataStore.data.first()[carTabUnlockedKey] ?: false
+
+    private val carUseMetricKey = booleanPreferencesKey("car_use_metric")
+
+    suspend fun saveCarUseMetric(useMetric: Boolean) {
+        context.dataStore.edit { it[carUseMetricKey] = useMetric }
+    }
+
+    suspend fun loadCarUseMetric(): Boolean =
+        context.dataStore.data.first()[carUseMetricKey] ?: false
 
     private val enabledDistancePairsKey = stringSetPreferencesKey("enabled_distance_pairs")
 
@@ -228,10 +246,10 @@ class ExchangeRateRepository(private val context: Context) {
     }
 
     suspend fun loadEnabledDistancePairs(): Set<DistancePair> {
-        val names = context.dataStore.data.first()[enabledDistancePairsKey]
-            ?: return setOf(DistancePair.MILES_KM)
-        return names.mapNotNull { name -> DistancePair.entries.find { it.name == name } }.toSet()
-            .ifEmpty { setOf(DistancePair.MILES_KM) }
+        val locked = setOf(DistancePair.MILES_KM, DistancePair.MPG_L100KM, DistancePair.MIKWH_KWH100KM)
+        val names = context.dataStore.data.first()[enabledDistancePairsKey] ?: return locked
+        val loaded = names.mapNotNull { name -> DistancePair.entries.find { it.name == name } }.toSet()
+        return (loaded + locked).ifEmpty { locked }
     }
 
     private val cardProfilesKey = stringPreferencesKey("card_profiles_v2")
