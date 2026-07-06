@@ -70,6 +70,32 @@
     }
     .play-btn:hover { background: #2db34a; }
     .play-btn svg { flex-shrink: 0; }
+    .coffee-btn {
+      display: inline-flex;
+      align-items: center;
+      gap: 10px;
+      background: #ffdd00;
+      color: #1c1c1e;
+      text-decoration: none;
+      font-size: 16px;
+      font-weight: 600;
+      padding: 14px 28px;
+      border-radius: 14px;
+      transition: background 0.2s;
+    }
+    .coffee-btn:hover { background: #f0d100; }
+    .hero-buttons {
+      display: flex;
+      justify-content: center;
+      align-items: center;
+      gap: 14px;
+      flex-wrap: wrap;
+    }
+    .coffee-note {
+      font-size: 13px;
+      color: #aeaeb2;
+      margin-top: 16px;
+    }
 
     /* Content */
     .content {
@@ -171,10 +197,14 @@
       <span class="badge">No tracking</span>
       <span class="badge">Works offline</span>
     </div>
-    <a class="play-btn" href="https://play.google.com/store/apps/details?id=com.tripcalc.app" target="_blank">
-      <svg width="20" height="20" viewBox="0 0 24 24" fill="white"><path d="M3.18 23.5c.3.17.64.22.97.14l11.5-11.5L12.18 8.7 3.18 23.5zM20.82 9.98l-3.18-1.83-3.3 3.29 3.3 3.3 3.2-1.84c.91-.52.91-1.4-.02-1.92zM2.01 1.47C1.98 1.63 2 1.8 2 2v20c0 .2.02.37.05.53l10.1-10.08L2.01 1.47zM15.64 4.5l-11.5-6.64c-.32-.18-.65-.22-.97-.14l9.97 9.97 2.5-3.19z"/></svg>
-      Get it on Google Play
-    </a>
+    <div class="hero-buttons">
+      <a class="play-btn" href="https://play.google.com/store/apps/details?id=com.tripcalc.app" target="_blank">
+        <svg width="20" height="20" viewBox="0 0 24 24" fill="white"><path d="M3.18 23.5c.3.17.64.22.97.14l11.5-11.5L12.18 8.7 3.18 23.5zM20.82 9.98l-3.18-1.83-3.3 3.29 3.3 3.3 3.2-1.84c.91-.52.91-1.4-.02-1.92zM2.01 1.47C1.98 1.63 2 1.8 2 2v20c0 .2.02.37.05.53l10.1-10.08L2.01 1.47zM15.64 4.5l-11.5-6.64c-.32-.18-.65-.22-.97-.14l9.97 9.97 2.5-3.19z"/></svg>
+        Get it on Google Play
+      </a>
+      <a class="coffee-btn" href="https://buymeacoffee.com/rww_100" target="_blank">☕ Buy me a coffee</a>
+    </div>
+    <p class="coffee-note">If you enjoy this free app, please consider buying me a coffee to say thanks!</p>
   </section>
 
   <div class="content">
