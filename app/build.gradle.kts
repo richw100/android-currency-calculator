@@ -13,14 +13,14 @@ val keystoreProperties = Properties().apply {
 
 android {
     namespace = "com.tripcalc.app"
-    compileSdk = 35
+    compileSdk = 36
 
     defaultConfig {
         applicationId = "com.tripcalc.app"
         minSdk = 26
-        targetSdk = 35
-        versionCode = 24
-        versionName = "1.6.4"
+        targetSdk = 36
+        versionCode = 25
+        versionName = "1.6.5"
     }
 
     signingConfigs {
